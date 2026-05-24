@@ -27,7 +27,7 @@ public class VersionTest {
 
     @Parameterized.Parameters(name = "{index}: compare({0}, {1}) should be {2}")
     public static Collection<Object[]> data() {
-        return Arrays.asList(new Object[][]{{V1_2_0, "1.10.0", -1}, {"1.10.0", V1_2_0, 1}, {V1_2_0, "1.2", 0}, {"1.2", V1_2_0, 0}, {V1_2_0, V1_2_0, 0}, {"2.0.0", "1.9.9", 1}, {"1.0.0", "2.0.0", -1}, {"1.0", "1.0.1", -1}, {"1.0.1", "1.0", 1}});
+        return Arrays.asList(new Object[]{V1_2_0, "1.10.0", -1}, new Object[]{"1.10.0", V1_2_0, 1}, new Object[]{V1_2_0, "1.2", 0}, new Object[]{"1.2", V1_2_0, 0}, new Object[]{V1_2_0, V1_2_0, 0}, new Object[]{"2.0.0", "1.9.9", 1}, new Object[]{"1.0.0", "2.0.0", -1}, new Object[]{"1.0", "1.0.1", -1}, new Object[]{"1.0.1", "1.0", 1});
     }
 
     @Test
