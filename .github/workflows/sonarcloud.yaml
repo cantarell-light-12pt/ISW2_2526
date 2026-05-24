@@ -12,9 +12,20 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          # Disabling shallow clones is required for accurate blame information
+        with: # Disabling shallow clones is required for accurate blame information
           fetch-depth: 0
+            
+      # Add this step to set up the correct JDK
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      # Add this step to compile the project
+      - name: Compile project
+        run: mvn clean compile
 
       - name: Execute SonarCloud Scan
         uses: SonarSource/sonarcloud-github-action@master
