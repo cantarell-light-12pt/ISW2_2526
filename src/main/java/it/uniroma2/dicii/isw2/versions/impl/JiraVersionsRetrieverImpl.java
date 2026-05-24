@@ -41,6 +41,7 @@ public class JiraVersionsRetrieverImpl implements VersionsRetriever {
         } catch (IOException e) {
             throw new VersionsException("Error retrieving or parsing versions from " + jiraUrl, e);
         } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
             throw new VersionsException("Error retrieving versions from " + jiraUrl, e);
         }
     }

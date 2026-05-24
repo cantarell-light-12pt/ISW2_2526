@@ -1,13 +1,11 @@
 package it.uniroma2.dicii.isw2.versions.model;
 
-import lombok.Getter;
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
-import lombok.Setter;
 
 import java.time.LocalDate;
 
-@Getter
-@Setter
+@Data
 @RequiredArgsConstructor
 public class Version implements Comparable<Version> {
 

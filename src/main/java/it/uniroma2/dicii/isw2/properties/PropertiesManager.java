@@ -13,30 +13,32 @@ public class PropertiesManager {
 
     private static final String PROPERTIES_FILE_NAME = "project.properties";
 
-    private static PropertiesManager instance;
-
     private final Map<String, String> properties;
 
+    /**
+     * Constructs an instance of {@code PropertiesManager}.
+     * <p>
+     * This private constructor initializes the internal properties map
+     * and loads the properties from the predefined property file.
+     * <p>
+     * This method is part of the Singleton pattern implementation to
+     * restrict instantiation and ensure only one instance of the class
+     * is created and used throughout the application.
+     */
     private PropertiesManager() {
         properties = new HashMap<>();
         loadProperties();
     }
 
     /**
-     * Provides the singleton instance of the {@code PropertiesManager} class.
-     * <p>
-     * This method ensures that only one instance of the {@code PropertiesManager}
-     * is created throughout the lifecycle of the application. If the instance does
-     * not already exist, it is initialized. Otherwise, the existing instance is returned.
-     * </p>
+     * Provides a synchronized method to retrieve the singleton instance of the {@code PropertiesManager} class.
+     * This method ensures that only one instance of {@code PropertiesManager} exists and is accessed globally,
+     * adhering to the Singleton design pattern.
      *
      * @return the singleton instance of {@code PropertiesManager}
      */
-    public static PropertiesManager getInstance() {
-        if (instance == null) {
-            instance = new PropertiesManager();
-        }
-        return instance;
+    public static synchronized PropertiesManager getInstance() {
+        return SingletonHelper.INSTANCE;
     }
 
     /**
@@ -75,6 +77,10 @@ public class PropertiesManager {
      */
     public String getProperty(String propertyName) {
         return properties.get(propertyName);
+    }
+
+    private static class SingletonHelper {
+        private static final PropertiesManager INSTANCE = new PropertiesManager();
     }
 
 }
