@@ -13,7 +13,7 @@ import java.util.Collection;
 public class VersionTest {
 
     private static final String V1_2_0 = "1.2.0";
-    private static final String messageFormat = "Expected: %s %s %s";
+    private static final String MESSAGE_FORMAT = "Expected: %s %s %s";
 
     private final String v1Name;
     private final String v2Name;
@@ -38,11 +38,11 @@ public class VersionTest {
         int result = v1.compareTo(v2);
 
         if (expectedResult < 0) {
-            Assert.assertTrue(String.format(messageFormat, v1Name, "<", v2Name), result < 0);
+            Assert.assertTrue(String.format(MESSAGE_FORMAT, v1Name, "<", v2Name), result < 0);
         } else if (expectedResult > 0) {
-            Assert.assertTrue(String.format(messageFormat, v1Name, ">", v2Name), result > 0);
+            Assert.assertTrue(String.format(MESSAGE_FORMAT, v1Name, ">", v2Name), result > 0);
         } else {
-            Assert.assertEquals(String.format(messageFormat, v1Name, "==", v2Name), 0, result);
+            Assert.assertEquals(String.format(MESSAGE_FORMAT, v1Name, "==", v2Name), 0, result);
         }
     }
 }
