@@ -11,8 +11,7 @@ public interface VersionsRetriever {
      * Retrieves a list of versions available in the system.
      *
      * @return a list of Version objects, where each object contains details such as
-     *         version id, name, release date, and status (released or overdue).
+     * version id, name, release date, and status (released or overdue).
      */
     List<Version> retrieveVersions() throws VersionsException;
-
 }
