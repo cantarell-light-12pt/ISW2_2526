@@ -1,5 +1,6 @@
 package it.uniroma2.dicii.isw2.versions.impl;
 
+import it.uniroma2.dicii.isw2.utils.HttpFetcher;
 import it.uniroma2.dicii.isw2.versions.VersionsRetriever;
 import it.uniroma2.dicii.isw2.versions.dto.JiraVersionDTO;
 import it.uniroma2.dicii.isw2.versions.exception.VersionsException;
@@ -10,11 +11,6 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -34,37 +30,13 @@ public class JiraVersionsRetrieverImpl implements VersionsRetriever {
         log.info("Retrieving versions from Jira...");
         log.debug("Jira URL: {}", jiraUrl);
         try {
-            String response = fetchUrl();
+            String response = new HttpFetcher().fetchUrl(jiraUrl);
+            log.debug("Response: {}", response);
             List<JiraVersionDTO> dtos = objectMapper.readValue(response, new TypeReference<>() {
             });
             return convertDTOsToVersion(dtos);
         } catch (IOException e) {
             throw new VersionsException("Error retrieving or parsing versions from " + jiraUrl, e);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new VersionsException("Error retrieving versions from " + jiraUrl, e);
-        }
-    }
-
-    /**
-     * Sends an HTTP GET request to the Jira URL and retrieves the response body as a string.
-     * <p>
-     * This method uses the {@link HttpClient} to perform the request with a timeout of 10 seconds.
-     * If the request is successful, the response body is returned. If an error occurs during the
-     * request or the execution is interrupted, the corresponding exception is thrown.
-     *
-     * @return the response body as a string
-     * @throws IOException          if an I/O error occurs when sending or receiving
-     * @throws InterruptedException if the operation is interrupted
-     */
-    private String fetchUrl() throws IOException, InterruptedException {
-        // In Java 21+, HttpClient is AutoCloseable
-        try (HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()) {
-            HttpRequest request = HttpRequest.newBuilder(URI.create(jiraUrl)).GET().build();
-            log.debug("Sending GET request...");
-            // BodyHandlers.ofString() automatically reads and closes the underlying stream
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            return response.body();
         }
     }
 
