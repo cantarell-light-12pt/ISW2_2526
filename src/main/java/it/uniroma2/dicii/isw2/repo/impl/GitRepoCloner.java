@@ -53,12 +53,14 @@ public class GitRepoCloner implements RepoCloner {
 
         // Walk the file tree in reverse order to delete children before parents
         try (Stream<Path> walk = Files.walk(path)) {
-            walk.sorted(Comparator.reverseOrder()).map(Path::toFile).forEach((file) -> {
-                if (file.delete()) log.debug("Deleted file: {}", file.getAbsolutePath());
-                else log.error("Failed to delete file: {}", file.getAbsolutePath());
+            walk.sorted(Comparator.reverseOrder()).forEach(filePath -> {
+                try {
+                    Files.delete(filePath);
+                } catch (IOException | SecurityException e) {
+                    log.error("Failed to delete file: {}", filePath, e);
+                }
             });
         }
-
         log.debug("Successfully deleted existing directory: {}", path);
     }
 
