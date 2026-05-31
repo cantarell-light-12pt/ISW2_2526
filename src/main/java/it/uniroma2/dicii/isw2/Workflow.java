@@ -1,5 +1,6 @@
 package it.uniroma2.dicii.isw2;
 
+import it.uniroma2.dicii.isw2.association.impl.JiraGitAssociator;
 import it.uniroma2.dicii.isw2.issues.IssuesRetriever;
 import it.uniroma2.dicii.isw2.issues.exception.IssueException;
 import it.uniroma2.dicii.isw2.issues.filter.IssueFilter;
@@ -23,6 +24,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 public class Workflow {
@@ -58,6 +60,9 @@ public class Workflow {
 
             // 4. Retrieve the list of commits from the repository
             List<Commit> commits = retrieveCommits();
+
+            // 5. Associate issues with commits
+            Map<Issue, List<Commit>> associations = associateCommitsToIssues(issues, commits);
 
             log.info("Workflow completed successfully!");
         } catch (VersionsException e) {
@@ -148,6 +153,21 @@ public class Workflow {
         List<Commit> commits = commitRetriever.getCommits(repoBasePath.resolve(projectName));
         commits.forEach(commit -> log.debug("Retrieved commit: {}", commit.id()));
         return commits;
+    }
+
+    /**
+     * Associates a list of Jira issues with a list of Git commits based on matching patterns.
+     * Each issue is examined to find commits that reference its key within the commit's
+     * full message. The results are returned as a mapping between issues and their associated commits.
+     *
+     * @param issues  the list of {@code Issue} objects representing Jira issues to be associated
+     * @param commits the list of {@code Commit} objects representing Git commits to be matched
+     * @return a {@code Map<Issue, List<Commit>>} where each key is an {@code Issue} and its value
+     * is a list of {@code Commit} objects that reference the issue
+     */
+    private Map<Issue, List<Commit>> associateCommitsToIssues(List<Issue> issues, List<Commit> commits) {
+        JiraGitAssociator associator = new JiraGitAssociator();
+        return associator.associate(issues, commits);
     }
 
 }
