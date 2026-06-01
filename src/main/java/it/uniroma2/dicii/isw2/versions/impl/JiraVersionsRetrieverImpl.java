@@ -57,11 +57,11 @@ public class JiraVersionsRetrieverImpl implements VersionsRetriever {
                 log.warn("Version {} has no id or name. Skipping...", dto);
                 continue;
             }
-            if (dto.getReleaseDate() != null) {
-                versions.add(new Version(dto.getId(), dto.getName(), dto.getReleaseDate(), dto.isReleased(), dto.isOverdue()));
-            } else {
-                log.warn("Version {} (id: {}) has no release date. Skipping...", dto.getName(), dto.getId());
-            }
+            Version version = new Version(dto.getId(), dto.getName(), dto.isReleased(), dto.isOverdue());
+            if (dto.getReleaseDate() == null)
+                log.warn("Version {} (id: {}) has no release date. It will be set later during commit association.", dto.getName(), dto.getId());
+            else version.setReleaseDate(dto.getReleaseDate());
+            versions.add(version);
         }
         log.info("Successfully retrieved {} versions out of {} total versions from Jira", versions.size(), dtos.size());
         // Order releases by name using Version::compareTo
