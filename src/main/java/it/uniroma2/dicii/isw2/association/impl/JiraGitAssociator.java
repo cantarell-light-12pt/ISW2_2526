@@ -36,12 +36,12 @@ public class JiraGitAssociator implements IssueCommitAssociator {
                     if (matcher.find()) {
                         associationMap.get(issue).add(commit);
                         log.debug("Associated commit {} to issue {}", commit.id(), issueKey);
-                        if (associationMap.get(issue).size() > 1) {
-                            commitIds = associationMap.get(issue).stream().map(Commit::id).reduce((id1, id2) -> id1 + ", " + id2).orElse("");
-                            log.warn("Multiple commits associated to issue {}: \n{}", issueKey, commitIds);
-                        }
                     }
                 }
+            }
+            if (associationMap.get(issue).size() > 1) {
+                commitIds = associationMap.get(issue).stream().map(Commit::id).reduce((id1, id2) -> id1 + ", " + id2).orElse("");
+                log.warn("Multiple commits associated to issue {}: \n{}", issueKey, commitIds);
             }
         }
 
