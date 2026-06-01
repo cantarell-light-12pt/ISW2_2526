@@ -1,6 +1,8 @@
 package it.uniroma2.dicii.isw2;
 
+import it.uniroma2.dicii.isw2.association.VersionTagAssociator;
 import it.uniroma2.dicii.isw2.association.impl.JiraGitAssociator;
+import it.uniroma2.dicii.isw2.association.impl.VersionTagAssociatorImpl;
 import it.uniroma2.dicii.isw2.issues.IssuesRetriever;
 import it.uniroma2.dicii.isw2.issues.exception.IssueException;
 import it.uniroma2.dicii.isw2.issues.filter.IssueFilter;
@@ -15,7 +17,9 @@ import it.uniroma2.dicii.isw2.repo.RepoCloner;
 import it.uniroma2.dicii.isw2.repo.exception.CommitException;
 import it.uniroma2.dicii.isw2.repo.impl.GitCommitRetriever;
 import it.uniroma2.dicii.isw2.repo.impl.GitRepoCloner;
+import it.uniroma2.dicii.isw2.repo.impl.GitTagsRetriever;
 import it.uniroma2.dicii.isw2.repo.model.Commit;
+import it.uniroma2.dicii.isw2.repo.model.Tag;
 import it.uniroma2.dicii.isw2.versions.VersionsRetriever;
 import it.uniroma2.dicii.isw2.versions.exception.VersionsException;
 import it.uniroma2.dicii.isw2.versions.impl.JiraVersionsRetrieverImpl;
@@ -35,6 +39,7 @@ public class Workflow {
     private final String repoUrl;
     private final Path repoBasePath;
     private final Boolean forceOverwrite;
+    private final String tagsPrefix;
 
     public Workflow() {
         this.projectName = PropertiesManager.getInstance().getProperty("project.name");
@@ -45,6 +50,7 @@ public class Workflow {
         this.repoUrl = PropertiesManager.getInstance().getProperty("project.repo.url");
         this.repoBasePath = Path.of(PropertiesManager.getInstance().getProperty("project.repo.basePath"));
         this.forceOverwrite = Boolean.parseBoolean(PropertiesManager.getInstance().getProperty("project.repo.forceOverwrite"));
+        this.tagsPrefix = PropertiesManager.getInstance().getProperty("project.tags.prefix");
     }
 
     public void execute() {
@@ -63,6 +69,9 @@ public class Workflow {
 
             // 5. Associate issues with commits
             Map<Issue, List<Commit>> associations = associateCommitsToIssues(issues, commits);
+
+            // 6. Retrieve the tags from the repository and associate them with versions
+            getTagsAndAssociateWithVersions(versions);
 
             log.info("Workflow completed successfully!");
         } catch (VersionsException e) {
@@ -168,6 +177,28 @@ public class Workflow {
     private Map<Issue, List<Commit>> associateCommitsToIssues(List<Issue> issues, List<Commit> commits) {
         JiraGitAssociator associator = new JiraGitAssociator();
         return associator.associate(issues, commits);
+    }
+
+    /**
+     * Retrieves Git tags from the repository, associates them with the provided versions,
+     * and removes versions that have no associated commit ID.
+     * <p>
+     * This method performs the following tasks:
+     * <ol>
+     * <li> Fetches Git tags from the repository located at the path resolved using {@code repoBasePath} and {@code projectName}.</li>
+     * <li> Associates the retrieved tags with the provided versions using an implementation of {@code VersionTagAssociator}.</li>
+     * <li> Removes versions that do not have an associated commit ID from the provided list.</li>
+     * <li> Logs debug messages for versions that are removed due to having no commit ID.</li>
+     * </ol>
+     *
+     * @param versions the list of {@code Version} objects to associate with Git tags;
+     *                 versions without an associated commit ID will be removed from this list.
+     */
+    private void getTagsAndAssociateWithVersions(List<Version> versions) {
+        List<Tag> tags = new GitTagsRetriever().getTags(repoBasePath.resolve(projectName));
+        VersionTagAssociator associator = new VersionTagAssociatorImpl(tagsPrefix);
+        associator.associateTagsToVersions(tags, versions);
+        versions.forEach(version -> log.debug("Removed version {} without associated commit ID", version.getName()));
     }
 
 }

@@ -118,7 +118,7 @@ public class JiraIssuesRetriever implements IssuesRetriever {
         List<Version> versions = new ArrayList<>();
         for (JiraVersionDTO dto : dtos)
             // Note: JiraVersionDTO does not contain release date when retrieving issues
-            versions.add(new Version(dto.getId(), dto.getName(), null, dto.isReleased(), dto.isOverdue()));
+            versions.add(new Version(dto.getId(), dto.getName(), dto.isReleased(), dto.isOverdue()));
         return versions;
     }
 

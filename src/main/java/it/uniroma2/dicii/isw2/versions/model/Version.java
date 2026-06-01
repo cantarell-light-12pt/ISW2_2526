@@ -13,7 +13,7 @@ public class Version implements Comparable<Version> {
 
     private final String name;
 
-    private final LocalDate releaseDate;
+    private LocalDate releaseDate;
 
     private final boolean released;
 
