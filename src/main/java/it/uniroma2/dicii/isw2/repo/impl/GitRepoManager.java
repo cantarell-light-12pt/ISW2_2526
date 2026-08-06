@@ -1,7 +1,8 @@
 package it.uniroma2.dicii.isw2.repo.impl;
 
-import it.uniroma2.dicii.isw2.repo.RepoCloner;
+import it.uniroma2.dicii.isw2.repo.RepoManager;
 import it.uniroma2.dicii.isw2.repo.exception.RepoException;
+import it.uniroma2.dicii.isw2.repo.model.Commit;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.errors.GitAPIException;
@@ -14,7 +15,7 @@ import java.util.Comparator;
 import java.util.stream.Stream;
 
 @Slf4j
-public class GitRepoCloner implements RepoCloner {
+public class GitRepoManager implements RepoManager {
 
     @Override
     public void cloneRepo(String repoUrl, String repoName, Path destinationPath, boolean forceOverwrite) throws RepoException {
@@ -38,6 +39,23 @@ public class GitRepoCloner implements RepoCloner {
             }
         }
         cloneRepo(repoUrl, repoName, targetDirectory);
+    }
+
+    @Override
+    public void checkoutAtCommit(Path repoPath, Commit commit) throws RepoException {
+        log.info("Checking out repository at {} to commit {}...", repoPath, commit.id());
+
+        // Use try-with-resources to automatically close the Git instance
+        try (Git git = Git.open(repoPath.toFile())) {
+            git.checkout().setName(commit.id()).call();
+            log.info("Successfully checked out commit {}", commit.id());
+        } catch (GitAPIException e) {
+            log.error("Failed to checkout commit '{}' in repository '{}': {}", commit.id(), repoPath, e.getMessage(), e);
+            throw new RepoException("Error while checking out commit " + commit.id(), e);
+        } catch (IOException e) {
+            log.error("Failed to open repository at '{}': {}", repoPath, e.getMessage(), e);
+            throw new RepoException("Unable to open repository at " + repoPath, e);
+        }
     }
 
     /**

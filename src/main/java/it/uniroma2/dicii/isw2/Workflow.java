@@ -13,10 +13,10 @@ import it.uniroma2.dicii.isw2.issues.model.IssueType;
 import it.uniroma2.dicii.isw2.issues.model.ResolutionType;
 import it.uniroma2.dicii.isw2.properties.PropertiesManager;
 import it.uniroma2.dicii.isw2.repo.CommitRetriever;
-import it.uniroma2.dicii.isw2.repo.RepoCloner;
+import it.uniroma2.dicii.isw2.repo.RepoManager;
 import it.uniroma2.dicii.isw2.repo.exception.CommitException;
 import it.uniroma2.dicii.isw2.repo.impl.GitCommitRetriever;
-import it.uniroma2.dicii.isw2.repo.impl.GitRepoCloner;
+import it.uniroma2.dicii.isw2.repo.impl.GitRepoManager;
 import it.uniroma2.dicii.isw2.repo.impl.GitTagsRetriever;
 import it.uniroma2.dicii.isw2.repo.model.Commit;
 import it.uniroma2.dicii.isw2.repo.model.Tag;
@@ -143,7 +143,7 @@ public class Workflow {
      * prepared for subsequent operations.
      */
     private void cloneRepo() {
-        RepoCloner repoCloner = new GitRepoCloner();
+        RepoManager repoCloner = new GitRepoManager();
         repoCloner.cloneRepo(repoUrl, projectName, repoBasePath, forceOverwrite);
         log.debug("Repository cloned successfully from {} to {}", repoUrl, repoBasePath.resolve(projectName));
     }
