@@ -68,11 +68,11 @@ public class IncrementalProportion extends AbstractProportion {
                         + "for defect {}", count, lifeCycle.fixedVersion().getName(), lifeCycle.issue().getKey());
                 setInjectedVersion(lifeCycle, lifeCycle.ov(), catalog);
                 fellBack++;
-                continue;
+            } else {
+                double proportion = proportionSum[previousVersions] / count;
+                setInjectedVersion(lifeCycle, injectedVersionIndex(lifeCycle, proportion), catalog);
+                estimated++;
             }
-            double proportion = proportionSum[previousVersions] / count;
-            setInjectedVersion(lifeCycle, injectedVersionIndex(lifeCycle, proportion), catalog);
-            estimated++;
         }
         log.info("Estimated the injected version of {} defects through the average proportion of the "
                 + "previous versions, {} through the Simple method for lack of enough defects", estimated, fellBack);

@@ -15,46 +15,46 @@ public class VersionNumberingTest {
 
     @Test
     public void numberVersionsSortsFromTheOldestToTheNewest() {
-        Version v1_2 = version("1.2.0");
-        Version v1_10 = version("1.10.0");
-        Version v1_0 = version("1.0.0");
-        List<Version> versions = new ArrayList<>(Arrays.asList(v1_10, v1_0, v1_2));
+        Version middle = version("1.2.0");
+        Version newest = version("1.10.0");
+        Version oldest = version("1.0.0");
+        List<Version> versions = new ArrayList<>(Arrays.asList(newest, oldest, middle));
 
         Version.numberVersions(versions);
 
-        Assert.assertEquals("The oldest version must come first", v1_0, versions.get(0));
-        Assert.assertEquals(v1_2, versions.get(1));
-        Assert.assertEquals("1.10.0 must be newer than 1.2.0", v1_10, versions.get(2));
+        Assert.assertEquals("The oldest version must come first", oldest, versions.get(0));
+        Assert.assertEquals(middle, versions.get(1));
+        Assert.assertEquals("1.10.0 must be newer than 1.2.0", newest, versions.get(2));
     }
 
     @Test
     public void numberVersionsAssignsContiguousOneBasedIndices() {
-        Version v1_0 = version("1.0.0");
-        Version v1_2 = version("1.2.0");
-        Version v1_10 = version("1.10.0");
-        List<Version> versions = new ArrayList<>(Arrays.asList(v1_10, v1_0, v1_2));
+        Version oldest = version("1.0.0");
+        Version middle = version("1.2.0");
+        Version newest = version("1.10.0");
+        List<Version> versions = new ArrayList<>(Arrays.asList(newest, oldest, middle));
 
         Version.numberVersions(versions);
 
-        Assert.assertEquals("The oldest version must be numbered 1", 1, v1_0.getIndex());
-        Assert.assertEquals(2, v1_2.getIndex());
-        Assert.assertEquals(3, v1_10.getIndex());
+        Assert.assertEquals("The oldest version must be numbered 1", 1, oldest.getIndex());
+        Assert.assertEquals(2, middle.getIndex());
+        Assert.assertEquals(3, newest.getIndex());
     }
 
     @Test
     public void numberVersionsClosesTheGapsLeftByRemovedVersions() {
-        Version v1_0 = version("1.0.0");
-        Version v1_2 = version("1.2.0");
-        Version v1_10 = version("1.10.0");
-        List<Version> versions = new ArrayList<>(Arrays.asList(v1_0, v1_2, v1_10));
+        Version oldest = version("1.0.0");
+        Version middle = version("1.2.0");
+        Version newest = version("1.10.0");
+        List<Version> versions = new ArrayList<>(Arrays.asList(oldest, middle, newest));
         Version.numberVersions(versions);
 
         // Mimics the pruning of the versions having no Git tag
-        versions.remove(v1_2);
+        versions.remove(middle);
         Version.numberVersions(versions);
 
-        Assert.assertEquals(1, v1_0.getIndex());
-        Assert.assertEquals("Renumbering must leave no gap behind the removed version", 2, v1_10.getIndex());
+        Assert.assertEquals(1, oldest.getIndex());
+        Assert.assertEquals("Renumbering must leave no gap behind the removed version", 2, newest.getIndex());
     }
 
     @Test
