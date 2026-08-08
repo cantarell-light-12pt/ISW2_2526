@@ -4,6 +4,7 @@ import lombok.Data;
 import lombok.RequiredArgsConstructor;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 @RequiredArgsConstructor
@@ -20,6 +21,34 @@ public class Version implements Comparable<Version> {
     private final boolean overdue;
 
     private String commitId;
+
+    /**
+     * The 1-based ordinal position of this version among the versions of the project, where 1 is the
+     * oldest one. Jira only provides the version name and id, so this number is assigned by
+     * {@link #numberVersions(List)}. A value of {@code 0} means the version has not been numbered yet.
+     */
+    private int index;
+
+    /**
+     * Sorts the given versions from the oldest to the newest and assigns each of them a 1-based ordinal
+     * index, comparing them by name through {@link #compareTo(Version)} (e.g. "1.2.0" gets index 1 and
+     * "1.10.0" gets index 2).
+     * <p>
+     * Both the sorting and the numbering are performed in place. The assigned indices are contiguous:
+     * the oldest version gets index 1 and the newest gets index {@code versions.size()}. Whenever
+     * versions are added to or removed from the list, this method must be invoked again, otherwise the
+     * indices stop forming a contiguous range and any arithmetic based on them — such as the Proportion
+     * method used to estimate injected versions — silently produces wrong results.
+     *
+     * @param versions the list of versions to sort and number, modified in place
+     * @throws NumberFormatException if a version name contains a non-numeric segment
+     */
+    public static void numberVersions(List<Version> versions) {
+        versions.sort(Version::compareTo);
+        for (int i = 0; i < versions.size(); i++) {
+            versions.get(i).setIndex(i + 1);
+        }
+    }
 
     /**
      * Compares two versions based on their semantic versioning.

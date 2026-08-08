@@ -44,7 +44,8 @@ public class JiraVersionsRetrieverImpl implements VersionsRetriever {
      * Converts a list of JiraVersionDTO objects into a list of Version objects.
      * Only DTOs with non-null id and name fields are converted. If a DTO has a release date,
      * it is converted to a Version object. DTOs missing a release date or having null id/name
-     * are logged and skipped. The resulting Version list is sorted by name in ascending order.
+     * are logged and skipped. The resulting Version list is sorted by name in ascending order and each
+     * version is assigned its 1-based ordinal index, since Jira only provides the version name and id.
      *
      * @param dtos the list of JiraVersionDTO objects to be converted
      * @return a list of Version objects derived from the input DTOs
@@ -64,8 +65,8 @@ public class JiraVersionsRetrieverImpl implements VersionsRetriever {
             versions.add(version);
         }
         log.info("Successfully retrieved {} versions out of {} total versions from Jira", versions.size(), dtos.size());
-        // Order releases by name using Version::compareTo
-        versions.sort(Version::compareTo);
+        // Order releases by name using Version::compareTo and number them from the oldest to the newest
+        Version.numberVersions(versions);
         return versions;
     }
 

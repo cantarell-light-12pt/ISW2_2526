@@ -5,7 +5,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Collection;
 
@@ -32,8 +31,9 @@ public class VersionTest {
 
     @Test
     public void testCompareTo() {
-        Version v1 = new Version("id1", v1Name, LocalDate.now(), true, false);
-        Version v2 = new Version("id2", v2Name, LocalDate.now(), true, false);
+        // The release date is left unset on purpose: compareTo only looks at the version name
+        Version v1 = new Version("id1", v1Name, true, false);
+        Version v2 = new Version("id2", v2Name, true, false);
 
         int result = v1.compareTo(v2);
 

@@ -12,6 +12,9 @@ import it.uniroma2.dicii.isw2.issues.model.IssueStatus;
 import it.uniroma2.dicii.isw2.issues.model.IssueType;
 import it.uniroma2.dicii.isw2.issues.model.ResolutionType;
 import it.uniroma2.dicii.isw2.properties.PropertiesManager;
+import it.uniroma2.dicii.isw2.proportion.ProportionStrategy;
+import it.uniroma2.dicii.isw2.proportion.ProportionStrategyFactory;
+import it.uniroma2.dicii.isw2.proportion.exception.ProportionException;
 import it.uniroma2.dicii.isw2.repo.CommitRetriever;
 import it.uniroma2.dicii.isw2.repo.RepoManager;
 import it.uniroma2.dicii.isw2.repo.exception.CommitException;
@@ -40,6 +43,7 @@ public class Workflow {
     private final Path repoBasePath;
     private final Boolean forceOverwrite;
     private final String tagsPrefix;
+    private final String proportionMethod;
 
     public Workflow() {
         this.projectName = PropertiesManager.getInstance().getProperty("project.name");
@@ -51,6 +55,7 @@ public class Workflow {
         this.repoBasePath = Path.of(PropertiesManager.getInstance().getProperty("project.repo.basePath"));
         this.forceOverwrite = Boolean.parseBoolean(PropertiesManager.getInstance().getProperty("project.repo.forceOverwrite"));
         this.tagsPrefix = PropertiesManager.getInstance().getProperty("project.tags.prefix");
+        this.proportionMethod = PropertiesManager.getInstance().getProperty("project.proportion.method");
     }
 
     public void execute() {
@@ -73,11 +78,16 @@ public class Workflow {
             // 6. Retrieve the tags from the repository and associate them with versions
             getTagsAndAssociateWithVersions(versions);
 
+            // 7. Estimate the injected version of the issues that do not report a usable one
+            applyProportion(issues, versions);
+
             log.info("Workflow completed successfully!");
         } catch (VersionsException e) {
             log.error("Error retrieving versions from Jira", e);
         } catch (IssueException e) {
             log.error("Error retrieving issues from Jira", e);
+        } catch (ProportionException e) {
+            log.error("Error estimating the injected versions of the issues", e);
         }
     }
 
@@ -188,7 +198,7 @@ public class Workflow {
      * <li> Fetches Git tags from the repository located at the path resolved using {@code repoBasePath} and {@code projectName}.</li>
      * <li> Associates the retrieved tags with the provided versions using an implementation of {@code VersionTagAssociator}.</li>
      * <li> Removes versions that do not have an associated commit ID from the provided list.</li>
-     * <li> Logs debug messages for versions that are removed due to having no commit ID.</li>
+     * <li> Renumbers the surviving versions, so that their ordinal indices stay contiguous.</li>
      * </ol>
      *
      * @param versions the list of {@code Version} objects to associate with Git tags;
@@ -198,7 +208,27 @@ public class Workflow {
         List<Tag> tags = new GitTagsRetriever().getTags(repoBasePath.resolve(projectName));
         VersionTagAssociator associator = new VersionTagAssociatorImpl(tagsPrefix);
         associator.associateTagsToVersions(tags, versions);
-        versions.forEach(version -> log.debug("Removed version {} without associated commit ID", version.getName()));
+        // Dropping the untagged versions leaves gaps in the numbering assigned at retrieval time, which
+        // would distort every difference between version indices computed by the Proportion method
+        Version.numberVersions(versions);
+        log.debug("Renumbered the {} versions having an associated tag", versions.size());
+    }
+
+    /**
+     * Estimates the injected version of the issues that do not report a usable one, applying the variant
+     * of the Proportion approach configured through the {@code project.proportion.method} property.
+     * <p>
+     * The issues are modified in place: each of them gets its opening version, and the ones whose
+     * injected version had to be estimated also get their injected version and their affected versions.
+     *
+     * @param issues   the issues to label
+     * @param versions the released versions of the project, already associated with their Git tags
+     * @throws ProportionException if the configured method is unknown, or if the issues cannot be
+     *                             placed in the release history
+     */
+    private void applyProportion(List<Issue> issues, List<Version> versions) throws ProportionException {
+        ProportionStrategy strategy = new ProportionStrategyFactory().getStrategy(proportionMethod);
+        strategy.applyProportion(issues, versions);
     }
 
 }
