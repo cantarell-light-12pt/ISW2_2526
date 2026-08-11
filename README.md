@@ -13,10 +13,10 @@ These metrics aim to quantify the complexity of the source code of a class.
 - **Size** (LOC): number of lines of code in the class at the current release.
 - **Number of Methods** (NM): number of methods in the class.
 - **Number of Attributes** (NA): number of attributes in the class.
-- **Weighted Cyclomatic Complexity** (WCC): the sum of the cyclomatic complexity of the class methods, divided by the number of methods.
-- **Maximum Cyclomati Complexity** (MCC): the maximum cyclomatic complexity of the class methods.
-- **Weighted Cognitive Complexity** (WCC): the sum of the cognitive complexity of the class methods, divided by the number of methods.
-- **Maximum Cognitive Complexity** (MCC): the maximum cognitive complexity of the class methods.
+- **Weighted Cyclomatic Complexity** (WCyC): the sum of the cyclomatic complexity of the class methods, divided by the number of methods.
+- **Maximum Cyclomatic Complexity** (MCyC): the maximum cyclomatic complexity of the class methods.
+- **Weighted Cognitive Complexity** (WCoC): the sum of the cognitive complexity of the class methods, divided by the number of methods.
+- **Maximum Cognitive Complexity** (MCoC): the maximum cognitive complexity of the class methods.
 
 ### Object-oriented metrics
 These metrics aim to quantify the complexity of a class from an object-oriented perspective.
