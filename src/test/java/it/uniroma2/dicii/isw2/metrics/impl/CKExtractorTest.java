@@ -118,10 +118,10 @@ public class CKExtractorTest {
 
     @Test
     public void testComplexityMetrics() {
-        assertMetric(4, "sample/Child.java", Metric.MCC);
-        assertMetric(2.5, "sample/Child.java", Metric.WCC);
-        assertMetric(1, "sample/Base.java", Metric.MCC);
-        assertMetric(1, "sample/Base.java", Metric.WCC);
+        assertMetric(4, "sample/Child.java", Metric.MCYC);
+        assertMetric(2.5, "sample/Child.java", Metric.WCYC);
+        assertMetric(1, "sample/Base.java", Metric.MCYC);
+        assertMetric(1, "sample/Base.java", Metric.WCYC);
     }
 
     @Test

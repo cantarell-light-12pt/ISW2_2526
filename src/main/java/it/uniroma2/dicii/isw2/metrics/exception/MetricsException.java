@@ -6,4 +6,8 @@ public class MetricsException extends Exception {
         super(message);
     }
 
+    public MetricsException(String message, Throwable cause) {
+        super(message, cause);
+    }
+
 }

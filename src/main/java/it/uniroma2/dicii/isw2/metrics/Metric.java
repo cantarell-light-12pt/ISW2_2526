@@ -58,12 +58,23 @@ public enum Metric {
      * Weighted Cyclomatic Complexity: the sum of the cyclomatic complexity of the methods of the class,
      * divided by the number of methods.
      */
-    WCC("Weighted Cyclomatic Complexity"),
+    WCYC("Weighted Cyclomatic Complexity"),
 
     /**
      * Maximum Cyclomatic Complexity: the highest cyclomatic complexity among the methods of the class.
      */
-    MCC("Maximum Cyclomatic Complexity");
+    MCYC("Maximum Cyclomatic Complexity"),
+
+    /**
+     * Weighted Cognitive Complexity: the sum of the cognitive complexity of the methods of the class,
+     * divided by the number of methods.
+     */
+    WCOC("Weighted Cognitive Complexity"),
+
+    /**
+     * Maximum Cognitive Complexity: the highest cognitive complexity among the methods of the class.
+     */
+    MCOC("Maximum Cognitive Complexity");
 
     private final String description;
 }
