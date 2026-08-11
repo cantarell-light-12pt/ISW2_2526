@@ -11,6 +11,11 @@ import it.uniroma2.dicii.isw2.issues.model.Issue;
 import it.uniroma2.dicii.isw2.issues.model.IssueStatus;
 import it.uniroma2.dicii.isw2.issues.model.IssueType;
 import it.uniroma2.dicii.isw2.issues.model.ResolutionType;
+import it.uniroma2.dicii.isw2.metrics.MetricsExtractor;
+import it.uniroma2.dicii.isw2.metrics.exception.MetricsException;
+import it.uniroma2.dicii.isw2.metrics.impl.CKExtractor;
+import it.uniroma2.dicii.isw2.metrics.impl.CompositeMetricsExtractor;
+import it.uniroma2.dicii.isw2.metrics.model.MetricsReport;
 import it.uniroma2.dicii.isw2.properties.PropertiesManager;
 import it.uniroma2.dicii.isw2.proportion.ProportionStrategy;
 import it.uniroma2.dicii.isw2.proportion.ProportionStrategyFactory;
@@ -18,6 +23,7 @@ import it.uniroma2.dicii.isw2.proportion.exception.ProportionException;
 import it.uniroma2.dicii.isw2.repo.CommitRetriever;
 import it.uniroma2.dicii.isw2.repo.RepoManager;
 import it.uniroma2.dicii.isw2.repo.exception.CommitException;
+import it.uniroma2.dicii.isw2.repo.exception.RepoException;
 import it.uniroma2.dicii.isw2.repo.impl.GitCommitRetriever;
 import it.uniroma2.dicii.isw2.repo.impl.GitRepoManager;
 import it.uniroma2.dicii.isw2.repo.impl.GitTagsRetriever;
@@ -30,6 +36,7 @@ import it.uniroma2.dicii.isw2.versions.model.Version;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -80,6 +87,10 @@ public class Workflow {
 
             // 7. Estimate the injected version of the issues that do not report a usable one
             applyProportion(issues, versions);
+
+            // 8. Extract the class-level metrics of every released version
+            Map<String, MetricsReport> metrics = extractMetrics(versions);
+            log.info("The dataset will hold {} rows", metrics.values().stream().mapToInt(MetricsReport::size).sum());
 
             log.info("Workflow completed successfully!");
         } catch (VersionsException e) {
@@ -229,6 +240,39 @@ public class Workflow {
     private void applyProportion(List<Issue> issues, List<Version> versions) throws ProportionException {
         ProportionStrategy strategy = new ProportionStrategyFactory().getStrategy(proportionMethod);
         strategy.applyProportion(issues, versions);
+    }
+
+    /**
+     * Extracts the class-level metrics of every released version of the project.
+     * <p>
+     * The repository is checked out at the commit each version is tagged on, so that the sources being
+     * measured are the ones the version was released with, and the whole set of extractors is then run
+     * on that snapshot. A version whose snapshot cannot be checked out or measured is left out of the
+     * result instead of aborting the extraction of the remaining ones. The repository is left checked
+     * out at the newest version that could be measured.
+     *
+     * @param versions the released versions of the project, already associated with their Git tags
+     * @return the metrics of the classes of each version, keyed by version name and ordered from the
+     * oldest version to the newest
+     */
+    private Map<String, MetricsReport> extractMetrics(List<Version> versions) {
+        Path repoPath = repoBasePath.resolve(projectName);
+        RepoManager repoManager = new GitRepoManager();
+        // Only CK is available for now: the extractors measuring the evolution and the code smells of a
+        // class will join the composite as further children, leaving this step unchanged
+        MetricsExtractor extractor = new CompositeMetricsExtractor().add(new CKExtractor());
+
+        Map<String, MetricsReport> metrics = new LinkedHashMap<>();
+        for (Version version : versions) {
+            try {
+                repoManager.checkoutAtCommit(repoPath, version.getCommitId());
+                metrics.put(version.getName(), extractor.extract(repoPath));
+            } catch (RepoException | MetricsException e) {
+                log.error("Unable to extract the metrics of version {}. Skipping it...", version.getName(), e);
+            }
+        }
+        log.info("Extracted the class-level metrics of {} versions out of {}", metrics.size(), versions.size());
+        return metrics;
     }
 
 }

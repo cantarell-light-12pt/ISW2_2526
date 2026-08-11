@@ -40,16 +40,15 @@ public class JiraIssuesRetriever implements IssuesRetriever {
         List<Issue> retrievedIssue = new ArrayList<>();
         JiraIssueResponseDTO dto;
         String url;
-        Long fetched = 0L;
+        long fetched = 0L;
         Long total = null;
-        Long maxResults = filter.getMaxResults();
         do {
             url = jiraUrl + new FilterToJqlConverter().convert(filter);
             log.debug("Jira URL: {}", url);
             dto = retrievePage(url);
             if (total == null) total = dto.getTotal();
-            fetched += maxResults;
             retrievedIssue.addAll(convertDTOsToIssues(dto.getIssues()));
+            fetched += dto.getIssues().size();
             filter.setStartAt(fetched);
             log.info("Fetched {} out of {} issues from Jira", fetched, total);
         } while (fetched < total);
