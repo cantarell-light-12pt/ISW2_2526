@@ -5,6 +5,7 @@ import com.github.mauricioaniche.ck.CKClassResult;
 import com.github.mauricioaniche.ck.CKMethodResult;
 import com.github.mauricioaniche.ck.CKNotifier;
 import com.github.mauricioaniche.ck.metric.NOCExtras;
+import it.uniroma2.dicii.isw2.metrics.ClassNameResolver;
 import it.uniroma2.dicii.isw2.metrics.Metric;
 import it.uniroma2.dicii.isw2.metrics.MetricsExtractor;
 import it.uniroma2.dicii.isw2.metrics.exception.MetricsException;
@@ -12,7 +13,6 @@ import it.uniroma2.dicii.isw2.metrics.model.ClassMetrics;
 import it.uniroma2.dicii.isw2.metrics.model.MetricsReport;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -37,7 +37,7 @@ public class CKExtractor implements MetricsExtractor {
 
     private static final Set<Metric> EXTRACTED_METRICS = Collections.unmodifiableSet(EnumSet.of(
             Metric.CBO, Metric.RFC, Metric.DIT, Metric.LCOM, Metric.NOC,
-            Metric.LOC, Metric.NM, Metric.NA, Metric.WCC, Metric.MCC));
+            Metric.LOC, Metric.NM, Metric.NA, Metric.WCYC, Metric.MCYC));
 
     /**
      * The kinds of type CK can declare a result to be about, minus the ones nested in another type
@@ -45,8 +45,6 @@ public class CKExtractor implements MetricsExtractor {
      * filter alone does not guarantee a single result per file: see {@link #topLevelType(String, List)}.
      */
     private static final Set<String> TOP_LEVEL_TYPES = Set.of("class", "interface", "enum");
-
-    private static final String JAVA_EXTENSION = ".java";
 
     /**
      * Do not resolve the dependencies of the sources against the jars found in the repository, and do
@@ -116,9 +114,9 @@ public class CKExtractor implements MetricsExtractor {
      * @return the type the file is named after, or the first one declared in it
      */
     private static CKClassResult topLevelType(String file, List<CKClassResult> declared) {
-        String expected = fileName(file);
+        String expected = ClassNameResolver.fileName(file);
         return declared.stream()
-                .filter(result -> simpleName(result.getClassName()).equals(expected))
+                .filter(result -> ClassNameResolver.simpleName(result.getClassName()).equals(expected))
                 .findFirst()
                 .orElseGet(declared::getFirst);
     }
@@ -132,7 +130,12 @@ public class CKExtractor implements MetricsExtractor {
      * @param result the metrics CK measured on it
      */
     private static void addClass(MetricsReport report, Path root, String file, CKClassResult result) {
-        ClassMetrics metrics = report.forClass(relativePath(root, file), result.getClassName());
+        // Only the package of the type CK reported on is kept: the name of the class is the one the file
+        // is named after, so that it agrees with the one every other extractor measuring it derives
+        String path = ClassNameResolver.relativePath(root, Path.of(file));
+        String className = ClassNameResolver.qualifiedName(
+                ClassNameResolver.packageOf(result.getClassName()), path);
+        ClassMetrics metrics = report.forClass(path, className);
         metrics.set(Metric.CBO, result.getCbo());
         metrics.set(Metric.RFC, result.getRfc());
         metrics.set(Metric.DIT, result.getDit());
@@ -143,9 +146,9 @@ public class CKExtractor implements MetricsExtractor {
         metrics.set(Metric.LOC, result.getLoc());
         metrics.set(Metric.NM, result.getNumberOfMethods());
         metrics.set(Metric.NA, result.getNumberOfFields());
-        metrics.set(Metric.WCC, weightedComplexity(result));
-        metrics.set(Metric.MCC, maximumComplexity(result));
-        log.debug("Measured the CK metrics of {}: {}", result.getClassName(), metrics.getValues());
+        metrics.set(Metric.WCYC, weightedComplexity(result));
+        metrics.set(Metric.MCYC, maximumComplexity(result));
+        log.debug("Measured the CK metrics of {}: {}", className, metrics.getValues());
     }
 
     /**
@@ -174,38 +177,6 @@ public class CKExtractor implements MetricsExtractor {
      */
     private static double maximumComplexity(CKClassResult result) {
         return result.getMethods().stream().mapToInt(CKMethodResult::getWmc).max().orElse(0);
-    }
-
-    /**
-     * Expresses the absolute path of a source file relative to the root of the repository, so that the
-     * measures can be joined with the history of the same file, which Git reports relative to that same
-     * root and always separated by {@code /}.
-     *
-     * @param root the root directory the sources were measured under
-     * @param file the absolute path of the source file
-     * @return the path of the file relative to the root
-     */
-    private static String relativePath(Path root, String file) {
-        Path absolute = Path.of(file).toAbsolutePath().normalize();
-        Path relative = absolute.startsWith(root) ? root.relativize(absolute) : absolute;
-        return relative.toString().replace(File.separatorChar, '/');
-    }
-
-    /**
-     * @param file the path of a source file
-     * @return the name of the file, without its directories nor the {@code .java} extension
-     */
-    private static String fileName(String file) {
-        String name = Path.of(file).getFileName().toString();
-        return name.endsWith(JAVA_EXTENSION) ? name.substring(0, name.length() - JAVA_EXTENSION.length()) : name;
-    }
-
-    /**
-     * @param className the fully qualified name of a class
-     * @return its name, without the package nor the types it is declared in
-     */
-    private static String simpleName(String className) {
-        return className.substring(className.lastIndexOf('.') + 1);
     }
 
     /**

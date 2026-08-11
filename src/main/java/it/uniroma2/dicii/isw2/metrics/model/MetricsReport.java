@@ -21,6 +21,10 @@ public class MetricsReport {
      * Returns the measures of the class declared by the given source file, creating an empty set of
      * measures if this is the first extractor to report on it. Extractors call this method to obtain
      * the object they have to fill in.
+     * <p>
+     * Only the name given by the first extractor reporting on a class is kept, which is harmless
+     * because every extractor derives it the same way, through
+     * {@link it.uniroma2.dicii.isw2.metrics.ClassNameResolver}.
      *
      * @param path      the path of the source file declaring the class, relative to the root of the
      *                  repository

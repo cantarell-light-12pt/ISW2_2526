@@ -15,6 +15,7 @@ import it.uniroma2.dicii.isw2.metrics.MetricsExtractor;
 import it.uniroma2.dicii.isw2.metrics.exception.MetricsException;
 import it.uniroma2.dicii.isw2.metrics.impl.CKExtractor;
 import it.uniroma2.dicii.isw2.metrics.impl.CompositeMetricsExtractor;
+import it.uniroma2.dicii.isw2.metrics.impl.JavaParserExtractor;
 import it.uniroma2.dicii.isw2.metrics.model.MetricsReport;
 import it.uniroma2.dicii.isw2.properties.PropertiesManager;
 import it.uniroma2.dicii.isw2.proportion.ProportionStrategy;
@@ -258,9 +259,11 @@ public class Workflow {
     private Map<String, MetricsReport> extractMetrics(List<Version> versions) {
         Path repoPath = repoBasePath.resolve(projectName);
         RepoManager repoManager = new GitRepoManager();
-        // Only CK is available for now: the extractors measuring the evolution and the code smells of a
-        // class will join the composite as further children, leaving this step unchanged
-        MetricsExtractor extractor = new CompositeMetricsExtractor().add(new CKExtractor());
+        // The extractors measuring the evolution and the code smells of a class will join the composite
+        // as further children, leaving this step unchanged
+        MetricsExtractor extractor = new CompositeMetricsExtractor()
+                .add(new CKExtractor())
+                .add(new JavaParserExtractor());
 
         Map<String, MetricsReport> metrics = new LinkedHashMap<>();
         for (Version version : versions) {
