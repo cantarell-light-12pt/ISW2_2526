@@ -1,7 +1,6 @@
 package it.uniroma2.dicii.isw2.repo;
 
 import it.uniroma2.dicii.isw2.repo.exception.RepoException;
-import it.uniroma2.dicii.isw2.repo.model.Commit;
 
 import java.nio.file.Path;
 
@@ -19,12 +18,14 @@ public interface RepoManager {
     void cloneRepo(String repoUrl, String repoName, Path destinationPath, boolean forceOverwrite) throws RepoException;
 
     /**
-     * Checks out the repository at the specified commit.
+     * Checks out the repository at the commit having the specified identifier,
+     * which is all the objects tied to a commit through a tag — such as the released versions of the
+     * project — carry.
      *
      * @param repoPath the file system path to the local Git repository
-     * @param commit   the commit to which the repository should be checked out
+     * @param commitId the identifier of the commit to which the repository should be checked out
      * @throws RepoException if an error occurs during the checkout process
      */
-    void checkoutAtCommit(Path repoPath, Commit commit) throws RepoException;
+    void checkoutAtCommit(Path repoPath, String commitId) throws RepoException;
 
 }

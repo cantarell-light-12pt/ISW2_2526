@@ -7,6 +7,10 @@
     </Appenders>
 
     <Loggers>
+        <!-- CK logs every source file it parses at INFO, which would bury the workflow logs under one
+             line per class per release -->
+        <Logger name="com.github.mauricioaniche.ck" level="WARN" />
+
         <Root level="INFO">
             <AppenderRef ref="ConsoleAppender" />
         </Root>

@@ -65,11 +65,27 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Log4j 1.x to Log4j2 Bridge, needed to route the logs CK writes through org.apache.log4j -->
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-1.2-api</artifactId>
+            <version>${log4j.version}</version>
+            <scope>runtime</scope>
+        </dependency>
+
         <!-- CK (Chidamber & Kemerer object-oriented metrics) -->
         <dependency>
             <groupId>com.github.mauricioaniche</groupId>
             <artifactId>ck</artifactId>
             <version>${ck.version}</version>
+            <exclusions>
+                <!-- CK ships the SLF4J 1.x binding to Log4j 1.x, which both clashes with the SLF4J 2.x
+                     provider used by this project and drags in the unmaintained log4j 1.2.17 -->
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-log4j12</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- Project Lombok -->
