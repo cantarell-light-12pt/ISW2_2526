@@ -5,6 +5,7 @@ import it.uniroma2.dicii.isw2.metrics.MetricsExtractor;
 import it.uniroma2.dicii.isw2.metrics.exception.MetricsException;
 import it.uniroma2.dicii.isw2.metrics.model.ClassMetrics;
 import it.uniroma2.dicii.isw2.metrics.model.MetricsReport;
+import it.uniroma2.dicii.isw2.metrics.model.Snapshot;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.file.Path;
@@ -62,11 +63,12 @@ public class CompositeMetricsExtractor implements MetricsExtractor {
     }
 
     @Override
-    public MetricsReport extract(Path sourcePath) throws MetricsException {
+    public MetricsReport extract(Snapshot snapshot) throws MetricsException {
+        Path sourcePath = snapshot.sourcePath();
         MetricsReport report = new MetricsReport();
         for (MetricsExtractor extractor : extractors) {
             log.info("Running {} on the sources under {}...", extractor.getClass().getSimpleName(), sourcePath);
-            report.merge(extractor.extract(sourcePath));
+            report.merge(extractor.extract(snapshot));
         }
         checkpoint(report, sourcePath);
         log.info("Measured {} metrics on the {} classes found under {}",

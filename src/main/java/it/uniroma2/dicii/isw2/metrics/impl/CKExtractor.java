@@ -13,6 +13,7 @@ import it.uniroma2.dicii.isw2.metrics.SourceScanner;
 import it.uniroma2.dicii.isw2.metrics.exception.MetricsException;
 import it.uniroma2.dicii.isw2.metrics.model.ClassMetrics;
 import it.uniroma2.dicii.isw2.metrics.model.MetricsReport;
+import it.uniroma2.dicii.isw2.metrics.model.Snapshot;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.file.Files;
@@ -82,7 +83,8 @@ public class CKExtractor implements MetricsExtractor {
     }
 
     @Override
-    public MetricsReport extract(Path sourcePath) throws MetricsException {
+    public MetricsReport extract(Snapshot snapshot) throws MetricsException {
+        Path sourcePath = snapshot.sourcePath();
         if (sourcePath == null || !Files.isDirectory(sourcePath)) {
             throw new MetricsException("Cannot extract the CK metrics of '" + sourcePath
                     + "': it is not an existing directory");

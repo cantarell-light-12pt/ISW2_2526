@@ -6,6 +6,7 @@ import it.uniroma2.dicii.isw2.metrics.SourceFilter;
 import it.uniroma2.dicii.isw2.metrics.exception.MetricsException;
 import it.uniroma2.dicii.isw2.metrics.model.ClassMetrics;
 import it.uniroma2.dicii.isw2.metrics.model.MetricsReport;
+import it.uniroma2.dicii.isw2.metrics.model.Snapshot;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -23,9 +24,12 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 /**
- * Runs the two extractors of the composite over the same snapshot, to check that they describe its
+ * Runs the two extractors parsing the sources over the same snapshot, to check that they describe its
  * classes the same way: were they to key or name a class differently, the dataset would hold two
  * half-filled rows for it instead of a single complete one.
+ * <p>
+ * The extractor reading the release history parses nothing and needs a repository to measure, so it
+ * is held to the same agreement by {@code JGitHistoryExtractorTest} instead.
  */
 public class ExtractorsConsistencyTest {
 
@@ -72,8 +76,8 @@ public class ExtractorsConsistencyTest {
 
     @Test
     public void testBothExtractorsKeyAndNameTheClassesAlike() throws MetricsException {
-        MetricsReport ck = new CKExtractor().extract(root);
-        MetricsReport javaParser = new JavaParserExtractor().extract(root);
+        MetricsReport ck = new CKExtractor().extract(new Snapshot(root));
+        MetricsReport javaParser = new JavaParserExtractor().extract(new Snapshot(root));
 
         assertEquals(ck.getClasses().size(), javaParser.getClasses().size());
         for (ClassMetrics measured : ck.getClasses()) {
@@ -86,7 +90,7 @@ public class ExtractorsConsistencyTest {
 
     @Test
     public void testClassIsNamedAfterItsFileRatherThanAfterTheTypeItDeclares() throws MetricsException {
-        MetricsReport report = new CKExtractor().extract(root);
+        MetricsReport report = new CKExtractor().extract(new Snapshot(root));
 
         assertEquals("sample.Helper", report.forPath("sample/Helper.java").getClassName());
     }
@@ -97,7 +101,7 @@ public class ExtractorsConsistencyTest {
                 .add(new CKExtractor())
                 .add(new JavaParserExtractor());
 
-        MetricsReport report = composite.extract(root);
+        MetricsReport report = composite.extract(new Snapshot(root));
 
         Set<Metric> expected = EnumSet.copyOf(composite.extractedMetrics());
         assertEquals(2, report.size());
@@ -119,8 +123,8 @@ public class ExtractorsConsistencyTest {
                 BASE_SOURCE.replace("Base", "Info"));
         SourceFilter filter = new PathSourceFilter("test", "Info.java");
 
-        MetricsReport ck = new CKExtractor(filter).extract(root);
-        MetricsReport javaParser = new JavaParserExtractor(filter).extract(root);
+        MetricsReport ck = new CKExtractor(filter).extract(new Snapshot(root));
+        MetricsReport javaParser = new JavaParserExtractor(filter).extract(new Snapshot(root));
 
         assertEquals(paths(ck), paths(javaParser));
         assertEquals(Set.of("sample/Base.java", "sample/Helper.java"), paths(ck));
@@ -136,7 +140,7 @@ public class ExtractorsConsistencyTest {
                 .add(new CKExtractor())
                 .add(new JavaParserExtractor());
 
-        MetricsReport report = composite.extract(root);
+        MetricsReport report = composite.extract(new Snapshot(root));
 
         assertTrue(report.incompleteClasses(composite.extractedMetrics()).isEmpty());
     }

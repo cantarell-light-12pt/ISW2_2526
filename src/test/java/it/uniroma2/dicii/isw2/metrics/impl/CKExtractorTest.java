@@ -4,6 +4,7 @@ import it.uniroma2.dicii.isw2.metrics.Metric;
 import it.uniroma2.dicii.isw2.metrics.exception.MetricsException;
 import it.uniroma2.dicii.isw2.metrics.model.ClassMetrics;
 import it.uniroma2.dicii.isw2.metrics.model.MetricsReport;
+import it.uniroma2.dicii.isw2.metrics.model.Snapshot;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -82,7 +83,7 @@ public class CKExtractorTest {
         Path packageDirectory = sources.newFolder("sample").toPath();
         Files.writeString(packageDirectory.resolve("Base.java"), BASE_SOURCE);
         Files.writeString(packageDirectory.resolve("Child.java"), CHILD_SOURCE);
-        report = extractor.extract(sources.getRoot().toPath());
+        report = extractor.extract(new Snapshot(sources.getRoot().toPath()));
     }
 
     @Test
@@ -135,7 +136,7 @@ public class CKExtractorTest {
         Files.writeString(testDirectory.resolve("BaseTest.java"),
                 CHILD_SOURCE.replace("class Child", "class BaseTest"));
 
-        MetricsReport filtered = new CKExtractor(new PathSourceFilter("test", "")).extract(sources.getRoot().toPath());
+        MetricsReport filtered = new CKExtractor(new PathSourceFilter("test", "")).extract(new Snapshot(sources.getRoot().toPath()));
 
         assertEquals(2, filtered.size());
         assertNull(filtered.forPath("test/sample/BaseTest.java"));
@@ -144,13 +145,13 @@ public class CKExtractorTest {
 
     @Test
     public void testEmptyDirectoryProducesAnEmptyReport() throws MetricsException, IOException {
-        assertEquals(0, extractor.extract(sources.newFolder("empty").toPath()).size());
+        assertEquals(0, extractor.extract(new Snapshot(sources.newFolder("empty").toPath())).size());
     }
 
     @Test
     public void testMissingDirectoryIsRejected() {
-        assertThrows(MetricsException.class, () -> extractor.extract(sources.getRoot().toPath().resolve("absent")));
-        assertThrows(MetricsException.class, () -> extractor.extract(null));
+        assertThrows(MetricsException.class, () -> extractor.extract(new Snapshot(sources.getRoot().toPath().resolve("absent"))));
+        assertThrows(MetricsException.class, () -> extractor.extract(new Snapshot(null)));
     }
 
     @Test

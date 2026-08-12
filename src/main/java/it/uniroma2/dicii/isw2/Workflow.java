@@ -16,9 +16,11 @@ import it.uniroma2.dicii.isw2.metrics.SourceFilter;
 import it.uniroma2.dicii.isw2.metrics.exception.MetricsException;
 import it.uniroma2.dicii.isw2.metrics.impl.CKExtractor;
 import it.uniroma2.dicii.isw2.metrics.impl.CompositeMetricsExtractor;
+import it.uniroma2.dicii.isw2.metrics.impl.JGitHistoryExtractor;
 import it.uniroma2.dicii.isw2.metrics.impl.JavaParserExtractor;
 import it.uniroma2.dicii.isw2.metrics.impl.PathSourceFilter;
 import it.uniroma2.dicii.isw2.metrics.model.MetricsReport;
+import it.uniroma2.dicii.isw2.metrics.model.Snapshot;
 import it.uniroma2.dicii.isw2.properties.PropertiesManager;
 import it.uniroma2.dicii.isw2.proportion.ProportionStrategy;
 import it.uniroma2.dicii.isw2.proportion.ProportionStrategyFactory;
@@ -42,6 +44,8 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
 public class Workflow {
@@ -88,6 +92,7 @@ public class Workflow {
 
             // 5. Associate issues with commits
             Map<Issue, List<Commit>> associations = associateCommitsToIssues(issues, commits);
+            Set<String> bugFixCommits = bugFixCommits(associations);
 
             // 6. Retrieve the tags from the repository and associate them with versions
             getTagsAndAssociateWithVersions(versions);
@@ -96,7 +101,7 @@ public class Workflow {
             applyProportion(issues, versions);
 
             // 8. Extract the class-level metrics of every released version
-            Map<String, MetricsReport> metrics = extractMetrics(versions);
+            Map<String, MetricsReport> metrics = extractMetrics(versions, bugFixCommits);
             log.info("The dataset will hold {} rows", metrics.values().stream().mapToInt(MetricsReport::size).sum());
 
             log.info("Workflow completed successfully!");
@@ -208,6 +213,26 @@ public class Workflow {
     }
 
     /**
+     * Flattens the association between the issues and the commits into the set of commits that fixed a
+     * bug, which is all the evolution metrics counting the bug fixes of a class need to know: they ask
+     * whether a commit touching a class was a fix, not which ticket it closed.
+     * <p>
+     * A commit referencing several tickets is a single fix, so the commits are collected into a set.
+     *
+     * @param associations the commits referencing each of the bug tickets retrieved from Jira
+     * @return the identifiers of the commits that fixed at least one of them
+     */
+    private Set<String> bugFixCommits(Map<Issue, List<Commit>> associations) {
+        Set<String> bugFixCommits = associations.values().stream()
+                .flatMap(List::stream)
+                .map(Commit::id)
+                .collect(Collectors.toSet());
+        log.info("{} commits fixed one of the {} bugs retrieved from Jira",
+                bugFixCommits.size(), associations.size());
+        return bugFixCommits;
+    }
+
+    /**
      * Retrieves Git tags from the repository, associates them with the provided versions,
      * and removes versions that have no associated commit ID.
      * <p>
@@ -258,27 +283,33 @@ public class Workflow {
      * result instead of aborting the extraction of the remaining ones. The repository is left checked
      * out at the newest version that could be measured.
      *
-     * @param versions the released versions of the project, already associated with their Git tags
+     * @param versions      the released versions of the project, already associated with their Git tags
+     * @param bugFixCommits the identifiers of the commits that fixed one of the bugs retrieved from Jira
      * @return the metrics of the classes of each version, keyed by version name and ordered from the
      * oldest version to the newest
      */
-    private Map<String, MetricsReport> extractMetrics(List<Version> versions) {
+    private Map<String, MetricsReport> extractMetrics(List<Version> versions, Set<String> bugFixCommits) {
         Path repoPath = repoBasePath.resolve(projectName);
         RepoManager repoManager = new GitRepoManager();
         // The very same filter is handed to every child: measuring the same set of sources is what lets
         // the composite check, at the end of each version, that they all described the same classes
         SourceFilter filter = new PathSourceFilter(excludedDirectories, excludedFiles);
-        // The extractors measuring the evolution and the code smells of a class will join the composite
-        // as further children, leaving this step unchanged
+        // The extractor measuring the code smells of a class will join the composite as a further
+        // child, leaving this step unchanged. The one reading the history comes last, since it is the
+        // only child unable to name a class by its package: see JGitHistoryExtractor
         MetricsExtractor extractor = new CompositeMetricsExtractor()
                 .add(new CKExtractor(filter))
-                .add(new JavaParserExtractor(filter));
+                .add(new JavaParserExtractor(filter))
+                .add(new JGitHistoryExtractor(repoPath, versions, bugFixCommits, filter));
 
         Map<String, MetricsReport> metrics = new LinkedHashMap<>();
-        for (Version version : versions) {
+        Version version;
+        for (int i = 0; i < versions.size(); i++) {
+            log.info("Extracting the class-level metrics of version {}/{}", i + 1, versions.size());
+            version = versions.get(i);
             try {
                 repoManager.checkoutAtCommit(repoPath, version.getCommitId());
-                metrics.put(version.getName(), extractor.extract(repoPath));
+                metrics.put(version.getName(), extractor.extract(new Snapshot(repoPath, version)));
             } catch (RepoException | MetricsException e) {
                 log.error("Unable to extract the metrics of version {}. Skipping it...", version.getName(), e);
             }
