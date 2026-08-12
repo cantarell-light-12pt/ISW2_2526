@@ -3,6 +3,7 @@ package it.uniroma2.dicii.isw2.metrics.impl;
 import it.uniroma2.dicii.isw2.metrics.Metric;
 import it.uniroma2.dicii.isw2.metrics.MetricsExtractor;
 import it.uniroma2.dicii.isw2.metrics.exception.MetricsException;
+import it.uniroma2.dicii.isw2.metrics.model.ClassMetrics;
 import it.uniroma2.dicii.isw2.metrics.model.MetricsReport;
 import lombok.RequiredArgsConstructor;
 import org.junit.Before;
@@ -10,6 +11,7 @@ import org.junit.Test;
 
 import java.nio.file.Path;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
@@ -90,6 +92,34 @@ public class CompositeMetricsExtractorTest {
         composite.add(new StubExtractor(FIRST_CLASS, Metric.LOC, 42)).add(new FailingExtractor());
 
         assertThrows(MetricsException.class, () -> composite.extract(SOURCE_PATH));
+    }
+
+    /**
+     * The checkpoint closing the measurement of a snapshot is about the children disagreeing on which
+     * files are classes: the row of a class only one of them reported on is kept, and is the one the
+     * report has to give back as incomplete.
+     */
+    @Test
+    public void testAClassMeasuredByOnlyOneChildIsReportedAsIncomplete() throws MetricsException {
+        composite.add(new StubExtractor(FIRST_CLASS, Metric.LOC, 42))
+                .add(new StubExtractor(FIRST_CLASS, Metric.CBO, 7))
+                .add(new StubExtractor(SECOND_CLASS, Metric.LOC, 13));
+
+        MetricsReport report = composite.extract(SOURCE_PATH);
+
+        assertEquals(List.of(SECOND_CLASS), report.incompleteClasses(composite.extractedMetrics()).stream()
+                .map(ClassMetrics::getPath).toList());
+        assertEquals(13, report.forPath(SECOND_CLASS).get(Metric.LOC).orElseThrow(), DELTA);
+    }
+
+    @Test
+    public void testEveryClassIsCompleteWhenTheChildrenAgree() throws MetricsException {
+        composite.add(new StubExtractor(FIRST_CLASS, Metric.LOC, 42))
+                .add(new StubExtractor(FIRST_CLASS, Metric.CBO, 7));
+
+        MetricsReport report = composite.extract(SOURCE_PATH);
+
+        assertTrue(report.incompleteClasses(composite.extractedMetrics()).isEmpty());
     }
 
     @Test

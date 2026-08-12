@@ -2,6 +2,7 @@ package it.uniroma2.dicii.isw2.metrics.impl;
 
 import it.uniroma2.dicii.isw2.metrics.Metric;
 import it.uniroma2.dicii.isw2.metrics.MetricsExtractor;
+import it.uniroma2.dicii.isw2.metrics.SourceFilter;
 import it.uniroma2.dicii.isw2.metrics.exception.MetricsException;
 import it.uniroma2.dicii.isw2.metrics.model.ClassMetrics;
 import it.uniroma2.dicii.isw2.metrics.model.MetricsReport;
@@ -15,9 +16,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.EnumSet;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Runs the two extractors of the composite over the same snapshot, to check that they describe its
@@ -101,5 +104,44 @@ public class ExtractorsConsistencyTest {
         for (ClassMetrics metrics : report.getClasses()) {
             assertEquals("Incomplete row for " + metrics.getPath(), expected, metrics.getValues().keySet());
         }
+    }
+
+    /**
+     * The two extractors are handed the same filter, as the workflow hands it to them, over a snapshot
+     * holding sources that filter leaves out: they have to agree on which classes survive it, since a
+     * file only one of them considers a source is exactly what the checkpoint of the composite reports.
+     */
+    @Test
+    public void testBothExtractorsHonourTheSameFilter() throws IOException, MetricsException {
+        Path testDirectory = sources.newFolder("test", "sample").toPath();
+        Files.writeString(testDirectory.resolve("BaseTest.java"), BASE_SOURCE.replace("Base", "BaseTest"));
+        Files.writeString(sources.getRoot().toPath().resolve("sample").resolve("Info.java"),
+                BASE_SOURCE.replace("Base", "Info"));
+        SourceFilter filter = new PathSourceFilter("test", "Info.java");
+
+        MetricsReport ck = new CKExtractor(filter).extract(root);
+        MetricsReport javaParser = new JavaParserExtractor(filter).extract(root);
+
+        assertEquals(paths(ck), paths(javaParser));
+        assertEquals(Set.of("sample/Base.java", "sample/Helper.java"), paths(ck));
+    }
+
+    /**
+     * The checkpoint the composite closes a snapshot with finds nothing to report when its children
+     * measure the same sources.
+     */
+    @Test
+    public void testCheckpointFindsNoIncompleteRowWhenTheExtractorsAgree() throws MetricsException {
+        MetricsExtractor composite = new CompositeMetricsExtractor()
+                .add(new CKExtractor())
+                .add(new JavaParserExtractor());
+
+        MetricsReport report = composite.extract(root);
+
+        assertTrue(report.incompleteClasses(composite.extractedMetrics()).isEmpty());
+    }
+
+    private static Set<String> paths(MetricsReport report) {
+        return report.getClasses().stream().map(ClassMetrics::getPath).collect(Collectors.toSet());
     }
 }

@@ -1,8 +1,11 @@
 package it.uniroma2.dicii.isw2.metrics.model;
 
+import it.uniroma2.dicii.isw2.metrics.Metric;
+
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -55,6 +58,24 @@ public class MetricsReport {
      */
     public int size() {
         return classes.size();
+    }
+
+    /**
+     * Returns the classes some of the metrics expected of this report were not measured on, i.e. the
+     * rows of the dataset an extractor reported on and another one did not. It is the query the
+     * composite extractor closes the measurement of a snapshot with: two extractors disagreeing on
+     * which files are classes is a defect of the extraction rather than of the project being mined,
+     * and it would otherwise go unnoticed until the dataset is read.
+     *
+     * @param expected the metrics every class of this report should carry, typically the ones the
+     *                 whole composite declares it measures
+     * @return the classes missing at least one of them, ordered by path, empty if every class is
+     * completely measured
+     */
+    public Collection<ClassMetrics> incompleteClasses(Set<Metric> expected) {
+        return classes.values().stream()
+                .filter(metrics -> !metrics.getValues().keySet().containsAll(expected))
+                .toList();
     }
 
     /**

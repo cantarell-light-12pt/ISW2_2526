@@ -162,6 +162,26 @@ public class JavaParserExtractorTest {
         assertNull(report.forPath("sample/package-info.java"));
     }
 
+    /**
+     * A source the filter leaves out is no row of the dataset, whether it is left out for the directory
+     * it sits in or for the name it carries.
+     */
+    @Test
+    public void testExcludedSourcesAreNotRowsOfTheDataset() throws IOException, MetricsException {
+        Path testDirectory = sources.newFolder("test", "sample").toPath();
+        Files.writeString(testDirectory.resolve("ChildTest.java"), CHILD_SOURCE.replace("Child", "ChildTest"));
+        Files.writeString(sources.getRoot().toPath().resolve("sample").resolve("OuterTest.java"),
+                CHILD_SOURCE.replace("Child", "OuterTest"));
+
+        MetricsReport filtered = new JavaParserExtractor(new PathSourceFilter("test", "*Test.java"))
+                .extract(sources.getRoot().toPath());
+
+        assertEquals(3, filtered.size());
+        assertNull(filtered.forPath("test/sample/ChildTest.java"));
+        assertNull(filtered.forPath("sample/OuterTest.java"));
+        assertNotNull(filtered.forPath("sample/Child.java"));
+    }
+
     @Test
     public void testUnparsableFileIsSkippedRatherThanFatal() throws IOException, MetricsException {
         Path packageDirectory = sources.getRoot().toPath().resolve("sample");
