@@ -5,6 +5,7 @@ import it.uniroma2.dicii.isw2.metrics.MetricsExtractor;
 import it.uniroma2.dicii.isw2.metrics.exception.MetricsException;
 import it.uniroma2.dicii.isw2.metrics.model.ClassMetrics;
 import it.uniroma2.dicii.isw2.metrics.model.MetricsReport;
+import it.uniroma2.dicii.isw2.metrics.model.Snapshot;
 import lombok.RequiredArgsConstructor;
 import org.junit.Before;
 import org.junit.Test;
@@ -42,7 +43,7 @@ public class CompositeMetricsExtractorTest {
 
     @Test
     public void testEmptyCompositeMeasuresNothing() throws MetricsException {
-        assertEquals(0, composite.extract(SOURCE_PATH).size());
+        assertEquals(0, composite.extract(new Snapshot(SOURCE_PATH)).size());
         assertTrue(composite.extractedMetrics().isEmpty());
         assertTrue(composite.getExtractors().isEmpty());
     }
@@ -52,7 +53,7 @@ public class CompositeMetricsExtractorTest {
         composite.add(new StubExtractor(FIRST_CLASS, Metric.LOC, 42))
                 .add(new StubExtractor(FIRST_CLASS, Metric.CBO, 7));
 
-        MetricsReport report = composite.extract(SOURCE_PATH);
+        MetricsReport report = composite.extract(new Snapshot(SOURCE_PATH));
 
         assertEquals(1, report.size());
         assertEquals(42, report.forPath(FIRST_CLASS).get(Metric.LOC).orElseThrow(), DELTA);
@@ -64,7 +65,7 @@ public class CompositeMetricsExtractorTest {
         composite.add(new StubExtractor(FIRST_CLASS, Metric.LOC, 42))
                 .add(new StubExtractor(SECOND_CLASS, Metric.LOC, 13));
 
-        MetricsReport report = composite.extract(SOURCE_PATH);
+        MetricsReport report = composite.extract(new Snapshot(SOURCE_PATH));
 
         assertEquals(2, report.size());
         assertEquals(42, report.forPath(FIRST_CLASS).get(Metric.LOC).orElseThrow(), DELTA);
@@ -76,7 +77,7 @@ public class CompositeMetricsExtractorTest {
         composite.add(new StubExtractor(FIRST_CLASS, Metric.LOC, 42))
                 .add(new StubExtractor(FIRST_CLASS, Metric.LOC, 13));
 
-        assertEquals(13, composite.extract(SOURCE_PATH).forPath(FIRST_CLASS).get(Metric.LOC).orElseThrow(), DELTA);
+        assertEquals(13, composite.extract(new Snapshot(SOURCE_PATH)).forPath(FIRST_CLASS).get(Metric.LOC).orElseThrow(), DELTA);
     }
 
     @Test
@@ -91,7 +92,7 @@ public class CompositeMetricsExtractorTest {
     public void testFailingChildAbortsTheWholeExtraction() {
         composite.add(new StubExtractor(FIRST_CLASS, Metric.LOC, 42)).add(new FailingExtractor());
 
-        assertThrows(MetricsException.class, () -> composite.extract(SOURCE_PATH));
+        assertThrows(MetricsException.class, () -> composite.extract(new Snapshot(SOURCE_PATH)));
     }
 
     /**
@@ -105,7 +106,7 @@ public class CompositeMetricsExtractorTest {
                 .add(new StubExtractor(FIRST_CLASS, Metric.CBO, 7))
                 .add(new StubExtractor(SECOND_CLASS, Metric.LOC, 13));
 
-        MetricsReport report = composite.extract(SOURCE_PATH);
+        MetricsReport report = composite.extract(new Snapshot(SOURCE_PATH));
 
         assertEquals(List.of(SECOND_CLASS), report.incompleteClasses(composite.extractedMetrics()).stream()
                 .map(ClassMetrics::getPath).toList());
@@ -117,7 +118,7 @@ public class CompositeMetricsExtractorTest {
         composite.add(new StubExtractor(FIRST_CLASS, Metric.LOC, 42))
                 .add(new StubExtractor(FIRST_CLASS, Metric.CBO, 7));
 
-        MetricsReport report = composite.extract(SOURCE_PATH);
+        MetricsReport report = composite.extract(new Snapshot(SOURCE_PATH));
 
         assertTrue(report.incompleteClasses(composite.extractedMetrics()).isEmpty());
     }
@@ -130,7 +131,7 @@ public class CompositeMetricsExtractorTest {
         assertEquals(1, composite.getExtractors().size());
         assertTrue(composite.remove(child));
         assertFalse(composite.remove(child));
-        assertNull(composite.extract(SOURCE_PATH).forPath(FIRST_CLASS));
+        assertNull(composite.extract(new Snapshot(SOURCE_PATH)).forPath(FIRST_CLASS));
     }
 
     /**
@@ -145,7 +146,7 @@ public class CompositeMetricsExtractorTest {
         private final double value;
 
         @Override
-        public MetricsReport extract(Path sourcePath) {
+        public MetricsReport extract(Snapshot snapshot) {
             MetricsReport report = new MetricsReport();
             report.forClass(path, "sample." + path).set(metric, value);
             return report;
@@ -163,8 +164,8 @@ public class CompositeMetricsExtractorTest {
     private static class FailingExtractor implements MetricsExtractor {
 
         @Override
-        public MetricsReport extract(Path sourcePath) throws MetricsException {
-            throw new MetricsException("Unable to measure " + sourcePath);
+        public MetricsReport extract(Snapshot snapshot) throws MetricsException {
+            throw new MetricsException("Unable to measure " + snapshot.sourcePath());
         }
 
         @Override

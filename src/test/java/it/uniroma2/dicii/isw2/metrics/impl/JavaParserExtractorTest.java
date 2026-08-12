@@ -4,6 +4,7 @@ import it.uniroma2.dicii.isw2.metrics.Metric;
 import it.uniroma2.dicii.isw2.metrics.exception.MetricsException;
 import it.uniroma2.dicii.isw2.metrics.model.ClassMetrics;
 import it.uniroma2.dicii.isw2.metrics.model.MetricsReport;
+import it.uniroma2.dicii.isw2.metrics.model.Snapshot;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -115,7 +116,7 @@ public class JavaParserExtractorTest {
         Files.writeString(packageDirectory.resolve("Child.java"), CHILD_SOURCE);
         Files.writeString(packageDirectory.resolve("Outer.java"), OUTER_SOURCE);
         Files.writeString(packageDirectory.resolve("Shape.java"), ABSTRACT_SOURCE);
-        report = extractor.extract(sources.getRoot().toPath());
+        report = extractor.extract(new Snapshot(sources.getRoot().toPath()));
     }
 
     @Test
@@ -156,7 +157,7 @@ public class JavaParserExtractorTest {
         Path packageDirectory = sources.getRoot().toPath().resolve("sample");
         Files.writeString(packageDirectory.resolve("package-info.java"), "package sample;\n");
 
-        report = extractor.extract(sources.getRoot().toPath());
+        report = extractor.extract(new Snapshot(sources.getRoot().toPath()));
 
         assertEquals(3, report.size());
         assertNull(report.forPath("sample/package-info.java"));
@@ -174,7 +175,7 @@ public class JavaParserExtractorTest {
                 CHILD_SOURCE.replace("Child", "OuterTest"));
 
         MetricsReport filtered = new JavaParserExtractor(new PathSourceFilter("test", "*Test.java"))
-                .extract(sources.getRoot().toPath());
+                .extract(new Snapshot(sources.getRoot().toPath()));
 
         assertEquals(3, filtered.size());
         assertNull(filtered.forPath("test/sample/ChildTest.java"));
@@ -187,7 +188,7 @@ public class JavaParserExtractorTest {
         Path packageDirectory = sources.getRoot().toPath().resolve("sample");
         Files.writeString(packageDirectory.resolve("Broken.java"), "package sample; class Broken {");
 
-        report = extractor.extract(sources.getRoot().toPath());
+        report = extractor.extract(new Snapshot(sources.getRoot().toPath()));
 
         assertEquals(3, report.size());
         assertNull(report.forPath("sample/Broken.java"));
@@ -198,7 +199,7 @@ public class JavaParserExtractorTest {
         Path packageDirectory = sources.getRoot().toPath().resolve("sample");
         Files.writeString(packageDirectory.resolve("Empty.java"), "package sample;\n\npublic class Empty {\n}\n");
 
-        report = extractor.extract(sources.getRoot().toPath());
+        report = extractor.extract(new Snapshot(sources.getRoot().toPath()));
 
         assertMetric(0, "sample/Empty.java", Metric.WCOC);
         assertMetric(0, "sample/Empty.java", Metric.MCOC);
@@ -206,13 +207,13 @@ public class JavaParserExtractorTest {
 
     @Test
     public void testEmptyDirectoryProducesAnEmptyReport() throws MetricsException, IOException {
-        assertEquals(0, extractor.extract(sources.newFolder("empty").toPath()).size());
+        assertEquals(0, extractor.extract(new Snapshot(sources.newFolder("empty").toPath())).size());
     }
 
     @Test
     public void testMissingDirectoryIsRejected() {
-        assertThrows(MetricsException.class, () -> extractor.extract(sources.getRoot().toPath().resolve("absent")));
-        assertThrows(MetricsException.class, () -> extractor.extract(null));
+        assertThrows(MetricsException.class, () -> extractor.extract(new Snapshot(sources.getRoot().toPath().resolve("absent"))));
+        assertThrows(MetricsException.class, () -> extractor.extract(new Snapshot(null)));
     }
 
     private void assertMetric(double expected, String path, Metric metric) {

@@ -74,7 +74,54 @@ public enum Metric {
     /**
      * Maximum Cognitive Complexity: the highest cognitive complexity among the methods of the class.
      */
-    MCOC("Maximum Cognitive Complexity");
+    MCOC("Maximum Cognitive Complexity"),
+
+    /**
+     * Churn: the number of lines of code added to and removed from the class since the previous
+     * release.
+     */
+    CH("Churn"),
+
+    /**
+     * Maximum Churn: the highest number of lines of code added to and removed from the class in a
+     * single release, over the releases it has been part of.
+     */
+    MCH("Maximum Churn"),
+
+    /**
+     * Change In Size: how much the class has grown or shrunk over the releases it has been part of,
+     * i.e. the lines of code added to it minus the ones removed from it.
+     */
+    CIS("Change In Size"),
+
+    /**
+     * Number of Revisions: the number of commits the class has been subjected to over the releases it
+     * has been part of.
+     */
+    NR("Number of Revisions"),
+
+    /**
+     * Number of Distinct Authors: the number of distinct authors that have contributed to the class
+     * over the releases it has been part of.
+     */
+    NDA("Number of Distinct Authors"),
+
+    /**
+     * Age: the number of releases the class has been part of, counting the one being measured.
+     */
+    AGE("Age"),
+
+    /**
+     * Number of Latest Bug Fixes: the number of commits that fixed a bug in the class since the
+     * previous release.
+     */
+    NLBF("Number of Latest Bug Fixes"),
+
+    /**
+     * Weighted Number of Bug Fixes: the number of commits that fixed a bug in the class over the
+     * releases it has been part of, divided by its age.
+     */
+    WNBF("Weighted Number of Bug Fixes");
 
     private final String description;
 }
