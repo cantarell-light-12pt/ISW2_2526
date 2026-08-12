@@ -9,20 +9,19 @@ import it.uniroma2.dicii.isw2.metrics.model.Snapshot;
 import it.uniroma2.dicii.isw2.repo.impl.GitRepoManager;
 import it.uniroma2.dicii.isw2.versions.model.Version;
 import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.api.errors.GitAPIException;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertThrows;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 /**
  * Measures the evolution metrics over a repository whose whole history is known, so that every count
@@ -59,6 +58,22 @@ public class JGitHistoryExtractorTest {
     private JGitHistoryExtractor extractor;
     private Version first;
     private Version second;
+
+    private static double metric(MetricsReport report, String path, Metric metric) {
+        return report.forPath(path).get(metric).orElseThrow();
+    }
+
+    private static Version version(String id, String name, String commitId, int index) {
+        Version version = new Version(id, name, true, false);
+        version.setCommitId(commitId);
+        version.setIndex(index);
+        return version;
+    }
+
+    private static String commit(Git git, String message, String author, String email) throws GitAPIException {
+        git.add().addFilepattern(".").call();
+        return git.commit().setMessage(message).setAuthor(author, email).setCommitter(author, email).setSign(false).call().getName();
+    }
 
     @Before
     public void setUp() throws Exception {
@@ -104,8 +119,7 @@ public class JGitHistoryExtractorTest {
         assertEquals(0, metric(report, STABLE, Metric.NLBF), DELTA);
         assertEquals(0, metric(report, STABLE, Metric.WNBF), DELTA);
 
-        assertEquals("Three lines written and two appended by the fix",
-                5, metric(report, CHURNY, Metric.CH), DELTA);
+        assertEquals("Three lines written and two appended by the fix", 5, metric(report, CHURNY, Metric.CH), DELTA);
         assertEquals(5, metric(report, CHURNY, Metric.CIS), DELTA);
         assertEquals("Written by Alice, fixed by Bob", 2, metric(report, CHURNY, Metric.NDA), DELTA);
         assertEquals(2, metric(report, CHURNY, Metric.NR), DELTA);
@@ -126,12 +140,10 @@ public class JGitHistoryExtractorTest {
         MetricsReport report = measure(second);
 
         assertEquals("Untouched by this release", 0, metric(report, STABLE, Metric.CH), DELTA);
-        assertEquals("It still took three lines back when it was written",
-                3, metric(report, STABLE, Metric.MCH), DELTA);
+        assertEquals("It still took three lines back when it was written", 3, metric(report, STABLE, Metric.MCH), DELTA);
         assertEquals(3, metric(report, STABLE, Metric.CIS), DELTA);
         assertEquals(1, metric(report, STABLE, Metric.NR), DELTA);
-        assertEquals("It has been in the project for both releases",
-                2, metric(report, STABLE, Metric.AGE), DELTA);
+        assertEquals("It has been in the project for both releases", 2, metric(report, STABLE, Metric.AGE), DELTA);
 
         assertEquals("A single line removed", 1, metric(report, CHURNY, Metric.CH), DELTA);
         assertEquals("The first release was the heavier one", 5, metric(report, CHURNY, Metric.MCH), DELTA);
@@ -165,8 +177,7 @@ public class JGitHistoryExtractorTest {
     public void testEveryDeclaredMetricIsMeasured() throws Exception {
         MetricsReport report = measure(second);
 
-        assertEquals("No class should be missing a metric the extractor declares it measures",
-                0, report.incompleteClasses(extractor.extractedMetrics()).size());
+        assertEquals("No class should be missing a metric the extractor declares it measures", 0, report.incompleteClasses(extractor.extractedMetrics()).size());
     }
 
     /**
@@ -177,19 +188,14 @@ public class JGitHistoryExtractorTest {
     @Test
     public void testTheThreeExtractorsAgreeOnTheClassesOfASnapshot() throws Exception {
         SourceFilter filter = new PathSourceFilter(".git,test,target", "*Test.java");
-        MetricsExtractor composite = new CompositeMetricsExtractor()
-                .add(new CKExtractor(filter))
-                .add(new JavaParserExtractor(filter))
-                .add(extractor);
+        MetricsExtractor composite = new CompositeMetricsExtractor().add(new CKExtractor(filter)).add(new JavaParserExtractor(filter)).add(extractor);
         new GitRepoManager().checkoutAtCommit(repoPath, second.getCommitId());
 
         MetricsReport report = composite.extract(new Snapshot(repoPath, second));
 
         assertEquals(3, report.size());
-        assertTrue("The three extractors disagreed on the classes of the snapshot",
-                report.incompleteClasses(composite.extractedMetrics()).isEmpty());
-        assertEquals("Every metric of the catalogue but the code smells",
-                20, composite.extractedMetrics().size());
+        assertTrue("The three extractors disagreed on the classes of the snapshot", report.incompleteClasses(composite.extractedMetrics()).isEmpty());
+        assertEquals("Every metric of the catalogue but the code smells", 20, composite.extractedMetrics().size());
     }
 
     /**
@@ -201,8 +207,7 @@ public class JGitHistoryExtractorTest {
     public void testASnapshotWithNoReleaseIsRejected() {
         assertThrows(MetricsException.class, () -> extractor.extract(new Snapshot(repoPath)));
         assertThrows(MetricsException.class, () -> extractor.extract(new Snapshot(null, first)));
-        assertThrows(MetricsException.class,
-                () -> extractor.extract(new Snapshot(repoPath.resolve("absent"), first)));
+        assertThrows(MetricsException.class, () -> extractor.extract(new Snapshot(repoPath.resolve("absent"), first)));
     }
 
     /**
@@ -216,31 +221,9 @@ public class JGitHistoryExtractorTest {
         return extractor.extract(new Snapshot(repoPath, version));
     }
 
-    private static double metric(MetricsReport report, String path, Metric metric) {
-        return report.forPath(path).get(metric).orElseThrow();
-    }
-
-    private static Version version(String id, String name, String commitId, int index) {
-        Version version = new Version(id, name, true, false);
-        version.setCommitId(commitId);
-        version.setIndex(index);
-        return version;
-    }
-
-    private void write(String path, String content) throws Exception {
+    private void write(String path, String content) throws IOException {
         Path file = repoPath.resolve(path);
         Files.createDirectories(file.getParent());
         Files.writeString(file, content);
-    }
-
-    private static String commit(Git git, String message, String author, String email) throws Exception {
-        git.add().addFilepattern(".").call();
-        return git.commit()
-                .setMessage(message)
-                .setAuthor(author, email)
-                .setCommitter(author, email)
-                .setSign(false)
-                .call()
-                .getName();
     }
 }
