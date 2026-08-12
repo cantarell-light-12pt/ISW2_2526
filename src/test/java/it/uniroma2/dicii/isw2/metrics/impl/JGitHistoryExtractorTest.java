@@ -92,7 +92,7 @@ public class JGitHistoryExtractorTest {
      * took in that release: its churn is its whole history.
      */
     @Test
-    public void testTheFirstReleaseMeasuresTheClassesWrittenForIt() throws Exception {
+    public void testTheFirstReleaseMeasuresTheClassesWrittenForIt() throws MetricsException {
         MetricsReport report = measure(first);
 
         assertEquals("Three lines written, none removed", 3, metric(report, STABLE, Metric.CH), DELTA);

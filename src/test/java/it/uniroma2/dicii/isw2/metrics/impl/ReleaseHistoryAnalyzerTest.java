@@ -1,14 +1,18 @@
 package it.uniroma2.dicii.isw2.metrics.impl;
 
 import it.uniroma2.dicii.isw2.metrics.SourceFilter;
+import it.uniroma2.dicii.isw2.metrics.exception.MetricsException;
 import it.uniroma2.dicii.isw2.metrics.model.ClassHistory;
+import it.uniroma2.dicii.isw2.repo.exception.RepoException;
 import it.uniroma2.dicii.isw2.versions.model.Version;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.MergeCommand;
+import org.eclipse.jgit.api.errors.*;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -42,7 +46,7 @@ public class ReleaseHistoryAnalyzerTest {
      * revisions instead of one.
      */
     @Test
-    public void testAMergeIsNotCountedTwice() throws Exception {
+    public void testAMergeIsNotCountedTwice() throws RepoException, MetricsException {
         Path repoPath = folder.getRoot().toPath();
         String release;
         try (Git git = Git.init().setDirectory(folder.getRoot()).call()) {
@@ -62,6 +66,8 @@ public class ReleaseHistoryAnalyzerTest {
                     .call()
                     .getNewHead()
                     .getName();
+        } catch (GitAPIException | IOException e) {
+            throw new RepoException("Error during test", e);
         }
 
         ClassHistory history = analyse(repoPath, release).get(MERGED);
@@ -97,7 +103,7 @@ public class ReleaseHistoryAnalyzerTest {
      * @param commitId the commit the only release is tagged on
      * @return the history of each of its classes
      */
-    private static Map<String, ClassHistory> analyse(Path repoPath, String commitId) throws Exception {
+    private static Map<String, ClassHistory> analyse(Path repoPath, String commitId) throws MetricsException {
         SourceFilter filter = new PathSourceFilter(".git,test,target", "*Test.java");
         Version version = new Version("1", "1.0.0", true, false);
         version.setCommitId(commitId);
@@ -107,13 +113,13 @@ public class ReleaseHistoryAnalyzerTest {
                 .get(1);
     }
 
-    private static void write(Path repoPath, String path, String content) throws Exception {
+    private static void write(Path repoPath, String path, String content) throws IOException {
         Path file = repoPath.resolve(path);
         Files.createDirectories(file.getParent());
         Files.writeString(file, content);
     }
 
-    private static String commit(Git git, String message) throws Exception {
+    private static String commit(Git git, String message) throws GitAPIException {
         git.add().addFilepattern(".").call();
         return git.commit()
                 .setMessage(message)
