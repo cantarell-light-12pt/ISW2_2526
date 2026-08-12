@@ -12,6 +12,8 @@ import com.github.javaparser.ast.body.TypeDeclaration;
 import it.uniroma2.dicii.isw2.metrics.ClassNameResolver;
 import it.uniroma2.dicii.isw2.metrics.Metric;
 import it.uniroma2.dicii.isw2.metrics.MetricsExtractor;
+import it.uniroma2.dicii.isw2.metrics.SourceFilter;
+import it.uniroma2.dicii.isw2.metrics.SourceScanner;
 import it.uniroma2.dicii.isw2.metrics.exception.MetricsException;
 import it.uniroma2.dicii.isw2.metrics.model.ClassMetrics;
 import it.uniroma2.dicii.isw2.metrics.model.MetricsReport;
@@ -26,7 +28,6 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Stream;
 
 /**
  * The leaf of the Composite pattern measuring the cognitive complexity of the classes of the dataset
@@ -43,9 +44,9 @@ public class JavaParserExtractor implements MetricsExtractor {
     private static final Set<Metric> EXTRACTED_METRICS =
             Collections.unmodifiableSet(EnumSet.of(Metric.WCOC, Metric.MCOC));
 
-    private static final String JAVA_EXTENSION = ".java";
-
     private final CognitiveComplexityCalculator calculator = new CognitiveComplexityCalculator();
+
+    private final SourceFilter filter;
 
     /**
      * The sources being mined are those of a project whose releases span several years, so they are
@@ -57,6 +58,24 @@ public class JavaParserExtractor implements MetricsExtractor {
             .setLanguageLevel(ParserConfiguration.LanguageLevel.BLEEDING_EDGE)
             .setAttributeComments(false));
 
+    /**
+     * Builds an extractor measuring every source it finds, which is what a directory holding nothing
+     * but the classes to measure calls for.
+     */
+    public JavaParserExtractor() {
+        this(SourceFilter.everything());
+    }
+
+    /**
+     * Builds an extractor measuring the sources of a snapshot that are functional code.
+     *
+     * @param filter the rule telling which of them are, shared with the other extractors of the
+     *               composite so that they all describe the same classes
+     */
+    public JavaParserExtractor(SourceFilter filter) {
+        this.filter = filter;
+    }
+
     @Override
     public MetricsReport extract(Path sourcePath) throws MetricsException {
         if (sourcePath == null || !Files.isDirectory(sourcePath)) {
@@ -67,7 +86,7 @@ public class JavaParserExtractor implements MetricsExtractor {
         log.info("Extracting the cognitive complexity metrics of the sources under {}...", root);
 
         MetricsReport report = new MetricsReport();
-        for (Path file : sourceFiles(root)) {
+        for (Path file : SourceScanner.scan(root, filter)) {
             parse(file).ifPresent(unit -> addClass(report, root, file, unit));
         }
         log.info("Extracted the cognitive complexity metrics of the {} classes found under {}",
@@ -78,25 +97,6 @@ public class JavaParserExtractor implements MetricsExtractor {
     @Override
     public Set<Metric> extractedMetrics() {
         return EXTRACTED_METRICS;
-    }
-
-    /**
-     * Lists the Java sources of a snapshot, sorted so that two runs over the same snapshot process them
-     * in the same order.
-     *
-     * @param root the root directory of the sources to measure
-     * @return the paths of the source files found under it
-     * @throws MetricsException if the directory cannot be walked
-     */
-    private static List<Path> sourceFiles(Path root) throws MetricsException {
-        try (Stream<Path> files = Files.walk(root)) {
-            return files.filter(Files::isRegularFile)
-                    .filter(file -> file.toString().endsWith(JAVA_EXTENSION))
-                    .sorted()
-                    .toList();
-        } catch (IOException e) {
-            throw new MetricsException("Unable to list the sources under '" + root + "'", e);
-        }
     }
 
     /**

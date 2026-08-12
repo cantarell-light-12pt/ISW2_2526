@@ -124,6 +124,24 @@ public class CKExtractorTest {
         assertMetric(1, "sample/Base.java", Metric.WCYC);
     }
 
+    /**
+     * A class left out by the filter is no row of the dataset, and is not even parsed: {@code Base}
+     * keeps the single child it has among the sources that are functional code, rather than being
+     * credited with the one declared under the test directory as well.
+     */
+    @Test
+    public void testExcludedSourcesAreNeitherMeasuredNorCounted() throws IOException, MetricsException {
+        Path testDirectory = sources.newFolder("test", "sample").toPath();
+        Files.writeString(testDirectory.resolve("BaseTest.java"),
+                CHILD_SOURCE.replace("class Child", "class BaseTest"));
+
+        MetricsReport filtered = new CKExtractor(new PathSourceFilter("test", "")).extract(sources.getRoot().toPath());
+
+        assertEquals(2, filtered.size());
+        assertNull(filtered.forPath("test/sample/BaseTest.java"));
+        assertEquals(1, filtered.forPath("sample/Base.java").get(Metric.NOC).orElseThrow(), DELTA);
+    }
+
     @Test
     public void testEmptyDirectoryProducesAnEmptyReport() throws MetricsException, IOException {
         assertEquals(0, extractor.extract(sources.newFolder("empty").toPath()).size());

@@ -8,6 +8,8 @@ import com.github.mauricioaniche.ck.metric.NOCExtras;
 import it.uniroma2.dicii.isw2.metrics.ClassNameResolver;
 import it.uniroma2.dicii.isw2.metrics.Metric;
 import it.uniroma2.dicii.isw2.metrics.MetricsExtractor;
+import it.uniroma2.dicii.isw2.metrics.SourceFilter;
+import it.uniroma2.dicii.isw2.metrics.SourceScanner;
 import it.uniroma2.dicii.isw2.metrics.exception.MetricsException;
 import it.uniroma2.dicii.isw2.metrics.model.ClassMetrics;
 import it.uniroma2.dicii.isw2.metrics.model.MetricsReport;
@@ -59,6 +61,26 @@ public class CKExtractor implements MetricsExtractor {
      */
     private static final int AUTOMATIC_BATCH_SIZE = 0;
 
+    private final SourceFilter filter;
+
+    /**
+     * Builds an extractor measuring every source it finds, which is what a directory holding nothing
+     * but the classes to measure calls for.
+     */
+    public CKExtractor() {
+        this(SourceFilter.everything());
+    }
+
+    /**
+     * Builds an extractor measuring the sources of a snapshot that are functional code.
+     *
+     * @param filter the rule telling which of them are, shared with the other extractors of the
+     *               composite so that they all describe the same classes
+     */
+    public CKExtractor(SourceFilter filter) {
+        this.filter = filter;
+    }
+
     @Override
     public MetricsReport extract(Path sourcePath) throws MetricsException {
         if (sourcePath == null || !Files.isDirectory(sourcePath)) {
@@ -72,8 +94,13 @@ public class CKExtractor implements MetricsExtractor {
         // it keeps the subclasses seen on a snapshot from being counted again on the following ones
         NOCExtras.resetInstance();
 
+        // The sources are enumerated here rather than left to the library to walk on its own, so that
+        // the excluded ones are not parsed at all: were they merely dropped from the report, the classes
+        // of the dataset would still be credited with the children and the couplings they bring
+        List<Path> sources = SourceScanner.scan(root, filter);
         CollectingNotifier notifier = new CollectingNotifier();
-        new CK(USE_JARS, AUTOMATIC_BATCH_SIZE, COLLECT_VARIABLES_AND_FIELDS).calculate(root, notifier);
+        new CK(USE_JARS, AUTOMATIC_BATCH_SIZE, COLLECT_VARIABLES_AND_FIELDS)
+                .calculate(root, notifier, sources.toArray(Path[]::new));
 
         MetricsReport report = buildReport(root, notifier.getResults());
         log.info("Extracted the CK metrics of the {} classes found under {}", report.size(), root);

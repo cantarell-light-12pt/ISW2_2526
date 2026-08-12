@@ -12,10 +12,12 @@ import it.uniroma2.dicii.isw2.issues.model.IssueStatus;
 import it.uniroma2.dicii.isw2.issues.model.IssueType;
 import it.uniroma2.dicii.isw2.issues.model.ResolutionType;
 import it.uniroma2.dicii.isw2.metrics.MetricsExtractor;
+import it.uniroma2.dicii.isw2.metrics.SourceFilter;
 import it.uniroma2.dicii.isw2.metrics.exception.MetricsException;
 import it.uniroma2.dicii.isw2.metrics.impl.CKExtractor;
 import it.uniroma2.dicii.isw2.metrics.impl.CompositeMetricsExtractor;
 import it.uniroma2.dicii.isw2.metrics.impl.JavaParserExtractor;
+import it.uniroma2.dicii.isw2.metrics.impl.PathSourceFilter;
 import it.uniroma2.dicii.isw2.metrics.model.MetricsReport;
 import it.uniroma2.dicii.isw2.properties.PropertiesManager;
 import it.uniroma2.dicii.isw2.proportion.ProportionStrategy;
@@ -52,6 +54,8 @@ public class Workflow {
     private final Boolean forceOverwrite;
     private final String tagsPrefix;
     private final String proportionMethod;
+    private final String excludedDirectories;
+    private final String excludedFiles;
 
     public Workflow() {
         this.projectName = PropertiesManager.getInstance().getProperty("project.name");
@@ -64,6 +68,8 @@ public class Workflow {
         this.forceOverwrite = Boolean.parseBoolean(PropertiesManager.getInstance().getProperty("project.repo.forceOverwrite"));
         this.tagsPrefix = PropertiesManager.getInstance().getProperty("project.tags.prefix");
         this.proportionMethod = PropertiesManager.getInstance().getProperty("project.proportion.method");
+        this.excludedDirectories = PropertiesManager.getInstance().getProperty("project.metrics.excludedDirectories");
+        this.excludedFiles = PropertiesManager.getInstance().getProperty("project.metrics.excludedFiles");
     }
 
     public void execute() {
@@ -259,11 +265,14 @@ public class Workflow {
     private Map<String, MetricsReport> extractMetrics(List<Version> versions) {
         Path repoPath = repoBasePath.resolve(projectName);
         RepoManager repoManager = new GitRepoManager();
+        // The very same filter is handed to every child: measuring the same set of sources is what lets
+        // the composite check, at the end of each version, that they all described the same classes
+        SourceFilter filter = new PathSourceFilter(excludedDirectories, excludedFiles);
         // The extractors measuring the evolution and the code smells of a class will join the composite
         // as further children, leaving this step unchanged
         MetricsExtractor extractor = new CompositeMetricsExtractor()
-                .add(new CKExtractor())
-                .add(new JavaParserExtractor());
+                .add(new CKExtractor(filter))
+                .add(new JavaParserExtractor(filter));
 
         Map<String, MetricsReport> metrics = new LinkedHashMap<>();
         for (Version version : versions) {
