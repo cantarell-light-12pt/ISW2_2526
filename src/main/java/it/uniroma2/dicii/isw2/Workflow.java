@@ -11,13 +11,16 @@ import it.uniroma2.dicii.isw2.issues.model.Issue;
 import it.uniroma2.dicii.isw2.issues.model.IssueStatus;
 import it.uniroma2.dicii.isw2.issues.model.IssueType;
 import it.uniroma2.dicii.isw2.issues.model.ResolutionType;
-import it.uniroma2.dicii.isw2.metrics.MetricsExtractor;
+import it.uniroma2.dicii.isw2.metrics.PmdRunner;
 import it.uniroma2.dicii.isw2.metrics.SourceFilter;
 import it.uniroma2.dicii.isw2.metrics.exception.MetricsException;
 import it.uniroma2.dicii.isw2.metrics.impl.CKExtractor;
 import it.uniroma2.dicii.isw2.metrics.impl.CompositeMetricsExtractor;
+import it.uniroma2.dicii.isw2.metrics.impl.DockerPmdRunner;
 import it.uniroma2.dicii.isw2.metrics.impl.JGitHistoryExtractor;
 import it.uniroma2.dicii.isw2.metrics.impl.JavaParserExtractor;
+import it.uniroma2.dicii.isw2.metrics.impl.JavaVersionDetector;
+import it.uniroma2.dicii.isw2.metrics.impl.PMDExtractor;
 import it.uniroma2.dicii.isw2.metrics.impl.PathSourceFilter;
 import it.uniroma2.dicii.isw2.metrics.model.MetricsReport;
 import it.uniroma2.dicii.isw2.metrics.model.Snapshot;
@@ -60,6 +63,10 @@ public class Workflow {
     private final String proportionMethod;
     private final String excludedDirectories;
     private final String excludedFiles;
+    private final String pmdImage;
+    private final String pmdRuleset;
+    private final String pmdDefaultJavaVersion;
+    private final long pmdTimeoutSeconds;
 
     public Workflow() {
         this.projectName = PropertiesManager.getInstance().getProperty("project.name");
@@ -74,6 +81,10 @@ public class Workflow {
         this.proportionMethod = PropertiesManager.getInstance().getProperty("project.proportion.method");
         this.excludedDirectories = PropertiesManager.getInstance().getProperty("project.metrics.excludedDirectories");
         this.excludedFiles = PropertiesManager.getInstance().getProperty("project.metrics.excludedFiles");
+        this.pmdImage = PropertiesManager.getInstance().getProperty("project.metrics.pmd.image");
+        this.pmdRuleset = PropertiesManager.getInstance().getProperty("project.metrics.pmd.ruleset");
+        this.pmdDefaultJavaVersion = PropertiesManager.getInstance().getProperty("project.metrics.pmd.defaultJavaVersion");
+        this.pmdTimeoutSeconds = Long.parseLong(PropertiesManager.getInstance().getProperty("project.metrics.pmd.timeoutSeconds"));
     }
 
     public void execute() {
@@ -294,13 +305,21 @@ public class Workflow {
         // The very same filter is handed to every child: measuring the same set of sources is what lets
         // the composite check, at the end of each version, that they all described the same classes
         SourceFilter filter = new PathSourceFilter(excludedDirectories, excludedFiles);
-        // The extractor measuring the code smells of a class will join the composite as a further
-        // child, leaving this step unchanged. The one reading the history comes last, since it is the
-        // only child unable to name a class by its package: see JGitHistoryExtractor
-        MetricsExtractor extractor = new CompositeMetricsExtractor()
+        CompositeMetricsExtractor extractor = new CompositeMetricsExtractor()
                 .add(new CKExtractor(filter))
-                .add(new JavaParserExtractor(filter))
-                .add(new JGitHistoryExtractor(repoPath, versions, bugFixCommits, filter));
+                .add(new JavaParserExtractor(filter));
+        // The one measuring the code smells runs PMD in a container: where none can be run, the dataset
+        // is built without the smell metrics rather than losing every other metric of every version
+        PmdRunner pmdRunner = new DockerPmdRunner(pmdImage, pmdRuleset, pmdTimeoutSeconds);
+        if (pmdRunner.isAvailable()) {
+            extractor.add(new PMDExtractor(filter, pmdRunner, new JavaVersionDetector(pmdDefaultJavaVersion)));
+        } else {
+            log.warn("PMD cannot be run, since no Docker daemon could be reached: the code smells of the "
+                    + "classes will be left out of the dataset");
+        }
+        // The one reading the history comes last, since it is the only child unable to name a class by
+        // its package: see JGitHistoryExtractor
+        extractor.add(new JGitHistoryExtractor(repoPath, versions, bugFixCommits, filter));
 
         Map<String, MetricsReport> metrics = new LinkedHashMap<>();
         Version version;
