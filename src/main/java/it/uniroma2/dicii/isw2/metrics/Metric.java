@@ -121,7 +121,32 @@ public enum Metric {
      * Weighted Number of Bug Fixes: the number of commits that fixed a bug in the class over the
      * releases it has been part of, divided by its age.
      */
-    WNBF("Weighted Number of Bug Fixes");
+    WNBF("Weighted Number of Bug Fixes"),
+
+    /**
+     * Number of Blocker Smells: the number of blocker-severity code smells detected in the class.
+     */
+    BS("Number of Blocker Smells"),
+
+    /**
+     * Number of High Smells: the number of high-severity code smells detected in the class.
+     */
+    HS("Number of High Smells"),
+
+    /**
+     * Number of Medium Smells: the number of medium-severity code smells detected in the class.
+     */
+    MS("Number of Medium Smells"),
+
+    /**
+     * Number of Minor Smells: the number of low-severity code smells detected in the class.
+     */
+    LS("Number of Minor Smells"),
+
+    /**
+     * Number of Info Smells: the number of info-severity code smells detected in the class.
+     */
+    IS("Number of Info Smells");
 
     private final String description;
 }

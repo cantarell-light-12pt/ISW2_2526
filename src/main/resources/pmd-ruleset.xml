@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ruleset name="ISW2 code smells"
+         xmlns="http://pmd.sourceforge.net/ruleset/2.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+
+    <description>
+        The rules whose violations are the code smells of the dataset, i.e. the five defect-oriented
+        categories PMD catalogues its Java rules under. The two left out, "codestyle" and
+        "documentation", are about how the source is written down rather than about what it does, and
+        their violations would bury the smells of a class under its formatting and its Javadoc.
+
+        The ruleset is carried by the project rather than taken from the PMD distribution, because the
+        smell counts of the oldest release and of the newest one are only comparable if the rules that
+        produced them are the same. For the very same reason the image running it is pinned to a
+        version: see project.metrics.pmd.image.
+
+        Rules are referenced by category, and their priority is left as PMD assigns it: the severity a
+        smell is counted under is the one PMD describes it with, as the catalogue in the README says.
+    </description>
+
+    <rule ref="category/java/bestpractices.xml"/>
+    <rule ref="category/java/design.xml">
+        <!-- The only rule of the categories that has to be told which packages the project is meant to
+             be layered in: left in, PMD drops it as misconfigured on every single run -->
+        <exclude name="LoosePackageCoupling"/>
+    </rule>
+    <rule ref="category/java/errorprone.xml"/>
+    <rule ref="category/java/multithreading.xml"/>
+    <rule ref="category/java/performance.xml"/>
+
+</ruleset>
