@@ -3,6 +3,9 @@ package it.uniroma2.dicii.isw2;
 import it.uniroma2.dicii.isw2.association.VersionTagAssociator;
 import it.uniroma2.dicii.isw2.association.impl.JiraGitAssociator;
 import it.uniroma2.dicii.isw2.association.impl.VersionTagAssociatorImpl;
+import it.uniroma2.dicii.isw2.dataset.DatasetWriter;
+import it.uniroma2.dicii.isw2.dataset.exception.DatasetException;
+import it.uniroma2.dicii.isw2.dataset.impl.CsvDatasetWriter;
 import it.uniroma2.dicii.isw2.issues.IssuesRetriever;
 import it.uniroma2.dicii.isw2.issues.exception.IssueException;
 import it.uniroma2.dicii.isw2.issues.filter.IssueFilter;
@@ -11,6 +14,7 @@ import it.uniroma2.dicii.isw2.issues.model.Issue;
 import it.uniroma2.dicii.isw2.issues.model.IssueStatus;
 import it.uniroma2.dicii.isw2.issues.model.IssueType;
 import it.uniroma2.dicii.isw2.issues.model.ResolutionType;
+import it.uniroma2.dicii.isw2.metrics.MetricsExtractor;
 import it.uniroma2.dicii.isw2.metrics.PmdRunner;
 import it.uniroma2.dicii.isw2.metrics.SourceFilter;
 import it.uniroma2.dicii.isw2.metrics.exception.MetricsException;
@@ -22,7 +26,6 @@ import it.uniroma2.dicii.isw2.metrics.impl.JavaParserExtractor;
 import it.uniroma2.dicii.isw2.metrics.impl.JavaVersionDetector;
 import it.uniroma2.dicii.isw2.metrics.impl.PMDExtractor;
 import it.uniroma2.dicii.isw2.metrics.impl.PathSourceFilter;
-import it.uniroma2.dicii.isw2.metrics.model.MetricsReport;
 import it.uniroma2.dicii.isw2.metrics.model.Snapshot;
 import it.uniroma2.dicii.isw2.properties.PropertiesManager;
 import it.uniroma2.dicii.isw2.proportion.ProportionStrategy;
@@ -44,7 +47,6 @@ import it.uniroma2.dicii.isw2.versions.model.Version;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.file.Path;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -67,6 +69,7 @@ public class Workflow {
     private final String pmdRuleset;
     private final String pmdDefaultJavaVersion;
     private final long pmdTimeoutSeconds;
+    private final Path datasetDirectory;
 
     public Workflow() {
         this.projectName = PropertiesManager.getInstance().getProperty("project.name");
@@ -85,6 +88,7 @@ public class Workflow {
         this.pmdRuleset = PropertiesManager.getInstance().getProperty("project.metrics.pmd.ruleset");
         this.pmdDefaultJavaVersion = PropertiesManager.getInstance().getProperty("project.metrics.pmd.defaultJavaVersion");
         this.pmdTimeoutSeconds = Long.parseLong(PropertiesManager.getInstance().getProperty("project.metrics.pmd.timeoutSeconds"));
+        this.datasetDirectory = Path.of(PropertiesManager.getInstance().getProperty("project.dataset.outputDirectory"));
     }
 
     public void execute() {
@@ -111,9 +115,8 @@ public class Workflow {
             // 7. Estimate the injected version of the issues that do not report a usable one
             applyProportion(issues, versions);
 
-            // 8. Extract the class-level metrics of every released version
-            Map<String, MetricsReport> metrics = extractMetrics(versions, bugFixCommits);
-            log.info("The dataset will hold {} rows", metrics.values().stream().mapToInt(MetricsReport::size).sum());
+            // 8. Extract the class-level metrics of every released version, writing them to the dataset
+            extractMetrics(versions, bugFixCommits);
 
             log.info("Workflow completed successfully!");
         } catch (VersionsException e) {
@@ -122,6 +125,8 @@ public class Workflow {
             log.error("Error retrieving issues from Jira", e);
         } catch (ProportionException e) {
             log.error("Error estimating the injected versions of the issues", e);
+        } catch (DatasetException e) {
+            log.error("Error writing the dataset", e);
         }
     }
 
@@ -286,22 +291,45 @@ public class Workflow {
     }
 
     /**
-     * Extracts the class-level metrics of every released version of the project.
+     * Extracts the class-level metrics of every released version of the project and writes them to the
+     * dataset.
      * <p>
      * The repository is checked out at the commit each version is tagged on, so that the sources being
      * measured are the ones the version was released with, and the whole set of extractors is then run
      * on that snapshot. A version whose snapshot cannot be checked out or measured is left out of the
-     * result instead of aborting the extraction of the remaining ones. The repository is left checked
-     * out at the newest version that could be measured.
+     * dataset instead of aborting the extraction of the remaining ones, whereas a dataset that cannot
+     * be written ends the run: the first is a gap in what the project can tell about itself, the second
+     * means the hours spent measuring it are being thrown away. The repository is left checked out at
+     * the newest version that could be measured.
+     * <p>
+     * The rows of a version are handed to the writer as soon as it has been measured, rather than when
+     * every version has: measuring the whole history takes hours, and the versions already analysed are
+     * worth keeping when a later one cannot be.
      *
      * @param versions      the released versions of the project, already associated with their Git tags
      * @param bugFixCommits the identifiers of the commits that fixed one of the bugs retrieved from Jira
-     * @return the metrics of the classes of each version, keyed by version name and ordered from the
-     * oldest version to the newest
+     * @throws DatasetException if the dataset cannot be written
      */
-    private Map<String, MetricsReport> extractMetrics(List<Version> versions, Set<String> bugFixCommits) {
+    private void extractMetrics(List<Version> versions, Set<String> bugFixCommits) throws DatasetException {
+        MetricsExtractor extractor = buildExtractor(versions, bugFixCommits);
+        Path datasetFile = datasetDirectory.resolve(projectName + ".csv");
+        int measured;
+        try (DatasetWriter dataset = CsvDatasetWriter.open(datasetFile)) {
+            measured = measureVersions(versions, extractor, dataset);
+        }
+        log.info("Extracted the class-level metrics of {} versions out of {}", measured, versions.size());
+    }
+
+    /**
+     * Assembles the composite measuring every metric of the dataset, in the order its children have to
+     * run in.
+     *
+     * @param versions      the released versions of the project, already associated with their Git tags
+     * @param bugFixCommits the identifiers of the commits that fixed one of the bugs retrieved from Jira
+     * @return the extractor to run on the snapshot of each version
+     */
+    private MetricsExtractor buildExtractor(List<Version> versions, Set<String> bugFixCommits) {
         Path repoPath = repoBasePath.resolve(projectName);
-        RepoManager repoManager = new GitRepoManager();
         // The very same filter is handed to every child: measuring the same set of sources is what lets
         // the composite check, at the end of each version, that they all described the same classes
         SourceFilter filter = new PathSourceFilter(excludedDirectories, excludedFiles);
@@ -320,21 +348,37 @@ public class Workflow {
         // The one reading the history comes last, since it is the only child unable to name a class by
         // its package: see JGitHistoryExtractor
         extractor.add(new JGitHistoryExtractor(repoPath, versions, bugFixCommits, filter));
+        return extractor;
+    }
 
-        Map<String, MetricsReport> metrics = new LinkedHashMap<>();
+    /**
+     * Measures every released version in turn, handing the classes of each of them to the dataset as
+     * soon as they have been measured.
+     *
+     * @param versions  the released versions of the project, already associated with their Git tags
+     * @param extractor the extractor to run on the snapshot of each of them
+     * @param dataset   where the rows are written
+     * @return how many versions could be measured
+     * @throws DatasetException if the rows of a version cannot be written
+     */
+    private int measureVersions(List<Version> versions, MetricsExtractor extractor, DatasetWriter dataset)
+            throws DatasetException {
+        Path repoPath = repoBasePath.resolve(projectName);
+        RepoManager repoManager = new GitRepoManager();
+        int measured = 0;
         Version version;
         for (int i = 0; i < versions.size(); i++) {
             log.info("Extracting the class-level metrics of version {}/{}", i + 1, versions.size());
             version = versions.get(i);
             try {
                 repoManager.checkoutAtCommit(repoPath, version.getCommitId());
-                metrics.put(version.getName(), extractor.extract(new Snapshot(repoPath, version)));
+                dataset.write(version, extractor.extract(new Snapshot(repoPath, version)));
+                measured++;
             } catch (RepoException | MetricsException e) {
                 log.error("Unable to extract the metrics of version {}. Skipping it...", version.getName(), e);
             }
         }
-        log.info("Extracted the class-level metrics of {} versions out of {}", metrics.size(), versions.size());
-        return metrics;
+        return measured;
     }
 
 }
