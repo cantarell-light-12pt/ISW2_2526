@@ -27,3 +27,7 @@ replay_pid*
 .idea/
 
 target/
+
+# The dataset produced by a run. Anchored to the root of the repository, since an unanchored pattern
+# would also match the package the code writing it lives in
+/dataset/
