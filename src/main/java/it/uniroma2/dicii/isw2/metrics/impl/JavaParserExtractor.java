@@ -26,24 +26,30 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
 /**
- * The leaf of the Composite pattern measuring the cognitive complexity of the classes of the dataset
- * through the <a href="https://javaparser.org">JavaParser</a> library, which builds the syntax tree of
- * a source file without needing it to compile.
+ * The leaf of the Composite pattern measuring the cognitive complexity and the depth of the
+ * inheritance tree of the classes of the dataset through the <a href="https://javaparser.org">JavaParser</a>
+ * library, which builds the syntax tree of a source file without needing it to compile.
  * <p>
- * The measure itself is left to {@link CognitiveComplexityCalculator}: this extractor is only about
- * finding the classes of a snapshot and the methods each of them declares. As CK does, it reports one
- * row per source file, describing the top-level type the file is named after.
+ * The measures themselves are left to {@link CognitiveComplexityCalculator} and to
+ * {@link InheritanceDepthCalculator}: this extractor is only about finding the classes of a snapshot,
+ * the methods each of them declares and the class each of them extends. As CK does, it reports one row
+ * per source file, describing the top-level type the file is named after.
+ * <p>
+ * Unlike its siblings, it reads the snapshot twice over one parse of it: a hierarchy runs across
+ * source files, so no class can be measured before every class of the release has been declared.
  */
 @Slf4j
 public class JavaParserExtractor implements MetricsExtractor {
 
     private static final Set<Metric> EXTRACTED_METRICS =
-            Collections.unmodifiableSet(EnumSet.of(Metric.WCOC, Metric.MCOC));
+            Collections.unmodifiableSet(EnumSet.of(Metric.WCOC, Metric.MCOC, Metric.DIT));
 
     private final CognitiveComplexityCalculator calculator = new CognitiveComplexityCalculator();
 
@@ -85,14 +91,22 @@ public class JavaParserExtractor implements MetricsExtractor {
                     + "': it is not an existing directory");
         }
         Path root = sourcePath.toAbsolutePath().normalize();
-        log.info("Extracting the cognitive complexity metrics of the sources under {}...", root);
+        log.info("Extracting the JavaParser metrics of the sources under {}...", root);
+
+        // A syntax tree is built once and kept until the whole snapshot has been measured: parsing every
+        // source twice would cost more than holding the trees of the one release being measured. The
+        // calculator of the depths is a new one per snapshot, so that the hierarchies of a release are
+        // resolved through its own classes alone, as CK resets the registry counting the children
+        Map<Path, CompilationUnit> units = new LinkedHashMap<>();
+        for (Path file : SourceScanner.scan(root, filter)) {
+            parse(file).ifPresent(unit -> units.put(file, unit));
+        }
+        InheritanceDepthCalculator depths = new InheritanceDepthCalculator();
+        units.values().forEach(depths::declare);
 
         MetricsReport report = new MetricsReport();
-        for (Path file : SourceScanner.scan(root, filter)) {
-            parse(file).ifPresent(unit -> addClass(report, root, file, unit));
-        }
-        log.info("Extracted the cognitive complexity metrics of the {} classes found under {}",
-                report.size(), root);
+        units.forEach((file, unit) -> addClass(report, root, file, unit, depths));
+        log.info("Extracted the JavaParser metrics of the {} classes found under {}", report.size(), root);
         return report;
     }
 
@@ -151,16 +165,17 @@ public class JavaParserExtractor implements MetricsExtractor {
     }
 
     /**
-     * Records in the report the cognitive complexity measured on the class a source file declares. A
-     * file declaring no type at all, as {@code package-info.java} does, is not a row of the dataset and
-     * is skipped.
+     * Records in the report the metrics measured on the class a source file declares. A file declaring
+     * no type at all, as {@code package-info.java} does, is not a row of the dataset and is skipped.
      *
      * @param report the report to fill in
      * @param root   the root directory the sources are measured under
      * @param file   the path of the source file
      * @param unit   its syntax tree
+     * @param depths the depths measured over the whole snapshot
      */
-    private void addClass(MetricsReport report, Path root, Path file, CompilationUnit unit) {
+    private void addClass(MetricsReport report, Path root, Path file, CompilationUnit unit,
+                          InheritanceDepthCalculator depths) {
         String path = ClassNameResolver.relativePath(root, file);
         Optional<TypeDeclaration<?>> declaration = topLevelType(path, unit);
         if (declaration.isEmpty()) {
@@ -174,7 +189,21 @@ public class JavaParserExtractor implements MetricsExtractor {
         List<Integer> complexities = complexities(declaration.get());
         metrics.set(Metric.WCOC, weightedComplexity(complexities));
         metrics.set(Metric.MCOC, maximumComplexity(complexities));
-        log.debug("Measured the cognitive complexity of {}: {}", metrics.getClassName(), metrics.getValues());
+        // The name the row carries is the one the file is named after, while the hierarchy was declared
+        // under the name of the type actually found in it: the two differ on a file declaring a type
+        // named otherwise, and the depth has to be asked for under the name it was declared with
+        metrics.set(Metric.DIT, depths.depthOf(qualifiedName(packageName, declaration.get())));
+        log.debug("Measured the JavaParser metrics of {}: {}", metrics.getClassName(), metrics.getValues());
+    }
+
+    /**
+     * @param packageName the package the source file declares, empty if it declares none
+     * @param declaration the type the row of the dataset is about
+     * @return the fully qualified name of that type
+     */
+    private static String qualifiedName(String packageName, TypeDeclaration<?> declaration) {
+        String simpleName = declaration.getNameAsString();
+        return packageName.isEmpty() ? simpleName : packageName + '.' + simpleName;
     }
 
     /**

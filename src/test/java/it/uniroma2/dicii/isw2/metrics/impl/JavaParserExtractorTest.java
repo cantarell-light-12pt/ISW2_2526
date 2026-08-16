@@ -147,6 +147,40 @@ public class JavaParserExtractorTest {
     }
 
     @Test
+    public void testClassesExtendingNothingAreOneDeep() {
+        assertMetric(1, "sample/Child.java", Metric.DIT);
+        assertMetric(1, "sample/Outer.java", Metric.DIT);
+        assertMetric(1, "sample/Shape.java", Metric.DIT);
+    }
+
+    /**
+     * The depth is followed through the classes of the snapshot, and the types nested in a class are no
+     * part of the depth of the class declaring them — which is the whole reason this is measured here
+     * rather than read off CK, whose own measure credits a class with the depth of each of them.
+     */
+    @Test
+    public void testInheritanceDepthFollowsTheChainOfTheSnapshot() throws IOException, MetricsException {
+        Path packageDirectory = sources.getRoot().toPath().resolve("sample");
+        Files.writeString(packageDirectory.resolve("Base.java"), """
+                package sample;
+
+                public class Base {
+
+                    public static class NestedUnderBase extends Base {}
+
+                    public static class DeeperUnderBase extends NestedUnderBase {}
+                }
+                """);
+        Files.writeString(packageDirectory.resolve("Derived.java"),
+                "package sample;\n\npublic class Derived extends Base {}\n");
+
+        report = extractor.extract(new Snapshot(sources.getRoot().toPath()));
+
+        assertMetric(1, "sample/Base.java", Metric.DIT);
+        assertMetric(2, "sample/Derived.java", Metric.DIT);
+    }
+
+    @Test
     public void testMethodsWithoutABodyStillCountAsMethods() {
         assertMetric(2, "sample/Shape.java", Metric.MCOC);
         assertMetric(1, "sample/Shape.java", Metric.WCOC);

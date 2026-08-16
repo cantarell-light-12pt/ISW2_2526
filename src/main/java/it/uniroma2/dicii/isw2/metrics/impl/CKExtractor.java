@@ -38,8 +38,15 @@ import java.util.stream.Collectors;
 @Slf4j
 public class CKExtractor implements MetricsExtractor {
 
+    /**
+     * The depth of the inheritance tree is not among these, though CK does report one: the library
+     * runs the metrics of a class over every type nested in it as well, and the depth it accumulates
+     * is never reset between those runs, so a class comes out as deep as itself plus each of the types
+     * it declares — 96 levels, for an exception three levels deep declaring dozens of nested subclasses
+     * of itself. It is measured by {@code JavaParserExtractor} instead.
+     */
     private static final Set<Metric> EXTRACTED_METRICS = Collections.unmodifiableSet(EnumSet.of(
-            Metric.CBO, Metric.RFC, Metric.DIT, Metric.LCOM, Metric.NOC,
+            Metric.CBO, Metric.RFC, Metric.LCOM, Metric.NOC,
             Metric.LOC, Metric.NM, Metric.NA, Metric.WCYC, Metric.MCYC));
 
     /**
@@ -167,7 +174,6 @@ public class CKExtractor implements MetricsExtractor {
         ClassMetrics metrics = report.forClass(path, className);
         metrics.set(Metric.CBO, result.getCbo());
         metrics.set(Metric.RFC, result.getRfc());
-        metrics.set(Metric.DIT, result.getDit());
         metrics.set(Metric.LCOM, result.getLcom());
         // NOC is read only now that the whole snapshot has been parsed, since a class can be extended by
         // any other one, including those CK happened to parse after it

@@ -15,6 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
@@ -101,11 +102,16 @@ public class CKExtractorTest {
         assertEquals("sample.Child", report.forPath("sample/Child.java").getClassName());
     }
 
+    /**
+     * The depth of the inheritance tree is no CK metric of this project — the library reports it
+     * wrongly for a class declaring nested types — so only the children are counted here. It is
+     * {@code JavaParserExtractorTest} that measures the depth.
+     */
     @Test
     public void testInheritanceMetrics() {
         assertMetric(1, "sample/Base.java", Metric.NOC);
         assertMetric(0, "sample/Child.java", Metric.NOC);
-        assertMetric(2, "sample/Child.java", Metric.DIT);
+        assertFalse(report.forPath("sample/Child.java").get(Metric.DIT).isPresent());
     }
 
     @Test
