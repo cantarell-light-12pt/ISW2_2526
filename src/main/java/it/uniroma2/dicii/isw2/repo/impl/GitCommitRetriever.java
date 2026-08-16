@@ -20,13 +20,21 @@ import java.util.List;
 @Slf4j
 public class GitCommitRetriever implements CommitRetriever {
 
+    @Override
     public List<Commit> getCommits(Path repositoryPath) throws CommitException {
         List<Commit> commits = new ArrayList<>();
 
         log.info("Opening repository at {} to retrieve commit history...", repositoryPath);
 
         try (Git git = Git.open(repositoryPath.toFile())) {
-            Iterable<RevCommit> logMessages = git.log().call();
+            // The log is read from every ref, and not from HEAD alone, because the branch that happens
+            // to be checked out is not where the history of the project is: the fixes of a patch release
+            // are committed on the maintenance branch of its line, so walking HEAD leaves every one of
+            // them out of the association with the bug tickets. The extraction of the metrics moreover
+            // leaves HEAD detached at the last release it measured, and the clone is reused across runs,
+            // so walking HEAD would also make the commits retrieved depend on where the previous run
+            // stopped
+            Iterable<RevCommit> logMessages = git.log().all().call();
             Commit commit;
             for (RevCommit revCommit : logMessages) {
                 commit = convertCommit(revCommit);
