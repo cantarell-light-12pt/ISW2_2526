@@ -6,7 +6,6 @@ import it.uniroma2.dicii.isw2.issues.model.IssueType;
 import it.uniroma2.dicii.isw2.issues.model.ResolutionType;
 import it.uniroma2.dicii.isw2.versions.model.Version;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -18,7 +17,7 @@ import java.util.List;
  */
 final class ProportionTestData {
 
-    static final LocalDate FIRST_RELEASE = LocalDate.of(2020, 1, 1);
+    static final LocalDateTime FIRST_RELEASE = LocalDateTime.of(2020, 1, 1, 0, 0);
 
     private ProportionTestData() {
         // Test data holder
@@ -76,11 +75,11 @@ final class ProportionTestData {
      */
     private static LocalDateTime creationDateFor(List<Version> versions, int ov) {
         return ov == 1
-                ? FIRST_RELEASE.minusDays(10).atStartOfDay()
-                : versions.get(ov - 2).getReleaseDate().plusDays(1).atStartOfDay();
+                ? FIRST_RELEASE.minusDays(10)
+                : versions.get(ov - 2).getReleaseDate().plusDays(1);
     }
 
     private static LocalDateTime releaseDateTimeOf(List<Version> versions, int index) {
-        return versions.get(index - 1).getReleaseDate().atStartOfDay();
+        return versions.get(index - 1).getReleaseDate();
     }
 }

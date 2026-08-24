@@ -50,7 +50,7 @@ public class GitCommitRetriever implements CommitRetriever {
     }
 
     /**
-     * Converts a {@link RevCommit} object to a custom {@link Commit} record.
+     * Converts a {@link RevCommit} object to a custom {@link Commit} recordDefect.
      *
      * @param revCommit the {@link RevCommit} object representing the commit to be converted
      * @return a {@link Commit} instance containing the details of the converted commit,
@@ -65,7 +65,7 @@ public class GitCommitRetriever implements CommitRetriever {
             ZonedDateTime commitDate = ZonedDateTime.ofInstant(authorIdent.getWhenAsInstant(), authorIdent.getZoneId());
             // Extract parent commit hashes
             List<String> parentIds = Arrays.stream(revCommit.getParents()).map(RevCommit::getName).toList();
-            // Construct the custom record
+            // Construct the custom recordDefect
             Commit commit = new Commit(revCommit.getName(), revCommit.getShortMessage(), revCommit.getFullMessage(), authorIdent.getName(), authorIdent.getEmailAddress(), commitDate, parentIds);
             log.debug("Retrieved commit: {} by {}", commit.id(), commit.authorName());
             return commit;

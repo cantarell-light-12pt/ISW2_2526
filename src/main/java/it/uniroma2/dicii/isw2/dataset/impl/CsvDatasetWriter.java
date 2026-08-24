@@ -26,11 +26,16 @@ import java.util.StringJoiner;
 /**
  * Writes the dataset as a comma-separated file, one row per class of each released version.
  * <p>
- * The columns are fixed: the two naming the row, followed by one per {@link Metric}, in the order
- * the metrics are declared. Declaring every metric rather than only the ones the extractors managed
- * to measure is what keeps two runs comparable — the code smells are missing from a run performed
- * where no container could be started, and their columns are then empty rather than absent, so that
- * whoever reads the file does not have to discover its shape before reading it.
+ * The columns are fixed: the two naming the row, followed by one per {@link Metric} in the order the
+ * metrics are declared, and the buggy/not-buggy label last. Declaring every metric rather than only
+ * the ones the extractors managed to measure is what keeps two runs comparable — the code smells are
+ * missing from a run performed where no container could be started, and their columns are then empty
+ * rather than absent, so that whoever reads the file does not have to discover its shape before
+ * reading it.
+ * <p>
+ * The label goes last because it is the variable a model reading this file is trained to predict,
+ * and it is never left empty, unlike a metric nobody could measure: a class no defect was ever fixed
+ * in is known not to have held one, which is an answer and not a gap.
  */
 @Slf4j
 public class CsvDatasetWriter implements DatasetWriter {
@@ -53,6 +58,18 @@ public class CsvDatasetWriter implements DatasetWriter {
      * differently across the releases that moved it, so neither identifies anything on its own.
      */
     private static final List<String> IDENTITY_COLUMNS = List.of("Version", "ClassName");
+
+    /**
+     * The column holding the buggy/not-buggy label, written after every measure.
+     */
+    private static final String LABEL_COLUMN = "Buggy";
+
+    /**
+     * How the label reads. Numbers rather than {@code true}/{@code false}, so that the column can be
+     * read as the binary variable it is without a conversion nobody would think to check.
+     */
+    private static final String BUGGY = "1";
+    private static final String NOT_BUGGY = "0";
 
     private final Path file;
     private final BufferedWriter writer;
@@ -147,12 +164,13 @@ public class CsvDatasetWriter implements DatasetWriter {
         for (Metric metric : Metric.values()) {
             header.add(metric.name());
         }
+        header.add(LABEL_COLUMN);
         return header.toString();
     }
 
     /**
      * @param version the released version the measures were taken on
-     * @param metrics the measures taken on one of its classes
+     * @param metrics the measures taken on one of its classes, and the label it carries
      * @return the row of the dataset describing that class in that version
      */
     private static String row(Version version, ClassMetrics metrics) {
@@ -163,11 +181,12 @@ public class CsvDatasetWriter implements DatasetWriter {
             OptionalDouble value = metrics.get(metric);
             row.add(value.isPresent() ? format(value.getAsDouble()) : "");
         }
+        row.add(metrics.isBuggy() ? BUGGY : NOT_BUGGY);
         return row.toString();
     }
 
     /**
-     * @return an empty record, i.e. a joiner separating the fields of a row and terminating it
+     * @return an empty recordDefect, i.e. a joiner separating the fields of a row and terminating it
      */
     private static StringJoiner createEmptyRecord() {
         return new StringJoiner(String.valueOf(SEPARATOR), "", RECORD_SEPARATOR);
@@ -197,7 +216,7 @@ public class CsvDatasetWriter implements DatasetWriter {
 
     /**
      * Quotes a field the way RFC 4180 prescribes whenever it holds a character that would otherwise
-     * break the record: the separator, a quote, or a line break. No version name and no class name
+     * break the recordDefect: the separator, a quote, or a line break. No version name and no class name
      * holds any of them today, but the writer has no way of knowing that, and a field splitting its
      * row in two would corrupt the dataset without failing anything.
      *

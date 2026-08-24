@@ -44,8 +44,14 @@ public class JiraVersionsRetrieverImpl implements VersionsRetriever {
      * Converts a list of JiraVersionDTO objects into a list of Version objects.
      * Only DTOs with non-null id and name fields are converted. If a DTO has a release date,
      * it is converted to a Version object. DTOs missing a release date or having null id/name
-     * are logged and skipped. The resulting Version list is sorted by name in ascending order and each
-     * version is assigned its 1-based ordinal index, since Jira only provides the version name and id.
+     * are logged and skipped. The resulting Version list is sorted from the oldest to the newest and
+     * each version is assigned its 1-based ordinal index, since Jira only provides the version name
+     * and id.
+     * <p>
+     * Both the dates and the numbering are provisional. Jira records the day somebody marked a version
+     * released, at the granularity of a day and with no guarantee it is the day the release was cut;
+     * the association with the Git tags replaces every one of them with the moment of the commit the
+     * release was built from, and numbers the versions that have a tag again.
      *
      * @param dtos the list of JiraVersionDTO objects to be converted
      * @return a list of Version objects derived from the input DTOs
@@ -61,11 +67,12 @@ public class JiraVersionsRetrieverImpl implements VersionsRetriever {
             Version version = new Version(dto.getId(), dto.getName(), dto.isReleased(), dto.isOverdue());
             if (dto.getReleaseDate() == null)
                 log.warn("Version {} (id: {}) has no release date. It will be set later during commit association.", dto.getName(), dto.getId());
-            else version.setReleaseDate(dto.getReleaseDate());
+            else version.setReleaseDate(dto.getReleaseDate().atStartOfDay());
             versions.add(version);
         }
         log.info("Successfully retrieved {} versions out of {} total versions from Jira", versions.size(), dtos.size());
-        // Order releases by name using Version::compareTo and number them from the oldest to the newest
+        // Order the releases from the oldest to the newest and number them from 1. Both the dates this
+        // reads and the indices it assigns are replaced once the Git tags say when each release was cut
         Version.numberVersions(versions);
         return versions;
     }

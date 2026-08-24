@@ -13,8 +13,10 @@ import java.util.TreeMap;
  * dataset describing one released version.
  * <p>
  * Classes are keyed by the path of the source file declaring them, since that is the identity the Git
- * history speaks in, and the one the evolution metrics and the buggy/not-buggy label will be joined
- * on. The paths are kept sorted, so that two runs over the same snapshot produce the same ordering.
+ * history speaks in, and the one the evolution metrics are joined on. The buggy/not-buggy label is
+ * joined on the qualified name instead: it comes from commits made on branches whose layout is not
+ * the one of the release being labelled. The paths are kept sorted, so that two runs over the same
+ * snapshot produce the same ordering.
  */
 public class MetricsReport {
 
@@ -88,7 +90,13 @@ public class MetricsReport {
      */
     public void merge(MetricsReport other) {
         for (ClassMetrics metrics : other.classes.values()) {
-            forClass(metrics.getPath(), metrics.getClassName()).setAll(metrics.getValues());
+            ClassMetrics merged = forClass(metrics.getPath(), metrics.getClassName());
+            merged.setAll(metrics.getValues());
+            // Unlike a measure, the label cannot be overwritten by the report merged in: it is
+            // evidence rather than an observation, and a class one of the two reports knows held a
+            // defect held one whatever the other says. Nothing labels before merging today, but a
+            // label lost in a merge would be a column of zeros nothing would fail on
+            merged.setBuggy(merged.isBuggy() || metrics.isBuggy());
         }
     }
 }

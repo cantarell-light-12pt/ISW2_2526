@@ -48,13 +48,30 @@ public class SimpleProportionTest {
     }
 
     @Test
-    public void leavesUntouchedTheDefectsAlreadyReportingAConsistentInjectedVersion() throws ProportionException {
+    public void keepsTheReportedInjectedVersionOfTheDefectsThatReportAConsistentOne() throws ProportionException {
         Issue issue = defect("PROJ-1", versions, 14, 16, 5);
 
         strategy.applyProportion(new ArrayList<>(List.of(issue)), versions);
 
         Assert.assertEquals("A reported and consistent AV must not be overwritten", "5.0", issue.getInjected().getName());
-        Assert.assertEquals(1, issue.getAffectedVersions().size());
+    }
+
+    /**
+     * A defect report lists the releases somebody happened to observe the failure on, not the ones the
+     * defect was present in: one reported against 5.0 and fixed in 16.0 was in the project for the ten
+     * releases in between, which nobody checked. Whoever reads the affected versions afterwards — the
+     * buggy/not-buggy labelling of the dataset above all — has to see the same thing for a defect whose
+     * injected version was reported and for one whose injected version was estimated.
+     */
+    @Test
+    public void fillsInTheReleasesTheReportedAffectedVersionsSkip() throws ProportionException {
+        Issue issue = defect("PROJ-1", versions, 14, 16, 5);
+
+        strategy.applyProportion(new ArrayList<>(List.of(issue)), versions);
+
+        List<String> affected = issue.getAffectedVersions().stream().map(Version::getName).toList();
+        Assert.assertEquals(List.of("5.0", "6.0", "7.0", "8.0", "9.0", "10.0", "11.0", "12.0", "13.0",
+                "14.0", "15.0"), affected);
     }
 
     @Test

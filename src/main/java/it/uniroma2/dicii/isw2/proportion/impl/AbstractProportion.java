@@ -85,18 +85,44 @@ public abstract class AbstractProportion implements ProportionStrategy {
      */
     protected void setInjectedVersion(DefectLifeCycle lifeCycle, int index, VersionCatalog catalog) {
         int bounded = Math.clamp(index, FIRST_VERSION_INDEX, lifeCycle.ov());
-        Version injected = catalog.byIndex(bounded);
-        lifeCycle.issue().setInjected(injected);
-        lifeCycle.issue().setAffectedVersions(catalog.range(bounded, lifeCycle.fv()));
+        Version injected = label(lifeCycle, catalog.byIndex(bounded), catalog);
         log.debug("Estimated the injected version of defect {} as {} (OV: {}, FV: {})",
                 lifeCycle.issue().getKey(), injected.getName(),
                 lifeCycle.openingVersion().getName(), lifeCycle.fixedVersion().getName());
     }
 
     /**
+     * Writes into a defect the version it was injected in and the versions it affects, the latter
+     * being all the versions from the injected one (included) to the fixed one (excluded).
+     * <p>
+     * Every defect that could be placed in the release history goes through here, whether its
+     * injected version was estimated or read from its report, so that the two carry the same notion
+     * of what "affected" means. The lists a defect report comes with are sparse — a defect reported
+     * against 3.4.6 and fixed in 3.4.10 says nothing about the three releases in between, which it
+     * was nonetheless present in — and whoever reads the affected versions afterwards, the
+     * buggy/not-buggy labelling above all, would otherwise see the estimated defects affect far more
+     * releases than the reported ones.
+     *
+     * @param lifeCycle the defect to label
+     * @param injected  the version the defect was injected in, already bounded
+     * @param catalog   the released versions of the project
+     * @return the injected version it was labelled with
+     */
+    private Version label(DefectLifeCycle lifeCycle, Version injected, VersionCatalog catalog) {
+        lifeCycle.issue().setInjected(injected);
+        lifeCycle.issue().setAffectedVersions(catalog.range(injected.getIndex(), lifeCycle.fv()));
+        return injected;
+    }
+
+    /**
      * Reconstructs the life cycle of a defect, resolving its opening, fixed and injected versions
      * against the released versions of the project, and records the opening and injected versions on the
      * issue itself.
+     * <p>
+     * A defect reporting a usable injected version is labelled here and now, since nothing about it is
+     * left to estimate: its affected versions are rewritten as {@code [IV, FV)}, exactly as
+     * {@link #setInjectedVersion(DefectLifeCycle, int, VersionCatalog)} rewrites the ones of the
+     * defects that had to be estimated.
      *
      * @param issue   the defect to place in the release history
      * @param catalog the released versions of the project
@@ -117,13 +143,25 @@ public abstract class AbstractProportion implements ProportionStrategy {
         }
         issue.setOpening(opening);
         issue.setInjected(resolveInjectedVersion(issue, catalog, opening));
-        return new DefectLifeCycle(issue, opening, fixed);
+        DefectLifeCycle lifeCycle = new DefectLifeCycle(issue, opening, fixed);
+        if (lifeCycle.hasInjectedVersion()) {
+            label(lifeCycle, issue.getInjected(), catalog);
+        }
+        return lifeCycle;
     }
 
     /**
-     * Resolves the fixed version (FV) of a defect as the most recent of the fix versions listed in its
-     * report. Defects whose report lists no fix version, or only versions that are not released versions
-     * of the project, have no fixed version and cannot be labelled.
+     * Resolves the fixed version (FV) of a defect as the <em>oldest</em> of the fix versions listed in
+     * its report, i.e. the first release that shipped the fix. Defects whose report lists no fix
+     * version, or only versions that are not released versions of the project, have no fixed version
+     * and cannot be labelled.
+     * <p>
+     * The oldest and not the newest, because a project maintaining several lines at once backports a
+     * fix to every line still alive and Jira lists all of them: of the 637 defects ZooKeeper fixed on
+     * the 3.5 line after 3.6 had branched off it, 528 were fixed on the 3.6 line as well. Reading the
+     * newest of those as the fixed version stretches the range of affected releases written below over
+     * every line the fix was carried to, so that the releases which actually shipped it — the whole
+     * point of a backport — come out labelled as still holding the defect.
      *
      * @param issue   the defect whose fixed version is wanted
      * @param catalog the released versions of the project
@@ -136,7 +174,7 @@ public abstract class AbstractProportion implements ProportionStrategy {
         return issue.getFixed().stream()
                 .map(version -> catalog.byName(version.getName()))
                 .filter(Objects::nonNull)
-                .max(Comparator.comparingInt(Version::getIndex))
+                .min(Comparator.comparingInt(Version::getIndex))
                 .orElse(null);
     }
 
