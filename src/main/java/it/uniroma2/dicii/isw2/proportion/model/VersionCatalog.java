@@ -3,7 +3,6 @@ package it.uniroma2.dicii.isw2.proportion.model;
 import it.uniroma2.dicii.isw2.proportion.exception.ProportionException;
 import it.uniroma2.dicii.isw2.versions.model.Version;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -83,6 +82,11 @@ public class VersionCatalog {
      * Returns the opening version (OV) of a defect reported at the given instant, i.e. the oldest
      * version released on or after the creation of the defect report — the release the project was
      * working towards when the failure was observed.
+     * <p>
+     * The search walks the catalogue in index order and stops at the first release late enough, which
+     * only answers the question because {@link Version#numberVersions(java.util.List)} numbers the
+     * releases by the date they were published: under an ordering that a project maintaining several
+     * lines at once does not release in, the first release found late enough is not the earliest one.
      *
      * @param creationDate the instant the defect report was created
      * @return the opening version, or {@code null} if the report was created after the newest release,
@@ -92,9 +96,8 @@ public class VersionCatalog {
         if (creationDate == null) {
             return null;
         }
-        LocalDate creationDay = creationDate.toLocalDate();
         for (Version version : ordered) {
-            if (version.getReleaseDate() != null && !version.getReleaseDate().isBefore(creationDay)) {
+            if (version.getReleaseDate() != null && !version.getReleaseDate().isBefore(creationDate)) {
                 return version;
             }
         }

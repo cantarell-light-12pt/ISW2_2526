@@ -5,6 +5,8 @@ import it.uniroma2.dicii.isw2.repo.model.Tag;
 import it.uniroma2.dicii.isw2.versions.model.Version;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 @Slf4j
@@ -16,6 +18,16 @@ public class VersionTagAssociatorImpl implements VersionTagAssociator {
         this.tagsPrefix = tagsPrefix;
     }
 
+    /**
+     * {@inheritDoc}
+     * <p>
+     * The release date a version comes out of Jira with is overwritten with the one its tag reports,
+     * rather than merely completed when Jira left it blank. Jira records the day somebody marked the
+     * version released, which is neither the moment the release was cut nor even reliably ordered with
+     * respect to the other releases; the tag points at the very commit the release was built from. The
+     * date is what the ordinal index of a version is assigned from, so the two sources cannot be
+     * mixed: a history half dated by Jira and half by Git orders neither half against the other.
+     */
     @Override
     public void associateTagsToVersions(List<Tag> tags, List<Version> versions) {
         List<Tag> candidates;
@@ -29,10 +41,9 @@ public class VersionTagAssociatorImpl implements VersionTagAssociator {
                 winner = candidates.getFirst();
                 version.setCommitId(winner.commitId());
                 log.debug("Associated tag {} to version {}", candidates.getFirst().label(), version.getName());
-                if (version.getReleaseDate() == null) {
-                    version.setReleaseDate(winner.date().toLocalDate());
-                    log.debug("Set release date for version {} to {}", version.getName(), winner.date().toLocalDate());
-                }
+                LocalDateTime releaseDate = releaseDateOf(winner);
+                version.setReleaseDate(releaseDate);
+                log.debug("Set release date for version {} to {}", version.getName(), releaseDate);
                 counter++;
             } else {
                 String tagLabels = candidates.stream().map(Tag::label).collect(java.util.stream.Collectors.joining(", "));
@@ -41,6 +52,23 @@ public class VersionTagAssociatorImpl implements VersionTagAssociator {
         }
         log.info("Found a tag for {} out of {} versions", counter, versions.size());
         removeUntaggedVersions(versions);
+    }
+
+    /**
+     * Reads out of a tag the moment the version it marks was released, as the commit the tag points at
+     * reports it.
+     * <p>
+     * The instant is normalised to UTC, and not merely stripped of its zone: the committers of a
+     * project the size of this one are spread across the world, and ZooKeeper's release tags carry
+     * offsets from {@code -07:00} to {@code +05:30}. Comparing the local times of two tags written in
+     * different zones would order the releases by the wall clock of whoever cut them rather than by
+     * the moment they happened, which is the one thing this date is read for.
+     *
+     * @param tag the tag marking the release
+     * @return the moment the release was cut, in UTC
+     */
+    private static LocalDateTime releaseDateOf(Tag tag) {
+        return tag.date().withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
     }
 
     /**

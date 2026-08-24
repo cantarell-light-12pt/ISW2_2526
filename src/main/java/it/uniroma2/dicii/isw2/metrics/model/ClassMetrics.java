@@ -3,6 +3,7 @@ package it.uniroma2.dicii.isw2.metrics.model;
 import it.uniroma2.dicii.isw2.metrics.Metric;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.ToString;
 
 import java.util.Collections;
@@ -11,8 +12,8 @@ import java.util.Map;
 import java.util.OptionalDouble;
 
 /**
- * The metrics measured on a single class of a single snapshot of the project, i.e. one row of the
- * dataset before it gets labelled.
+ * The metrics measured on a single class of a single snapshot of the project, together with the
+ * label saying whether it held a defect: one whole row of the dataset.
  * <p>
  * The measures are held in a map rather than in one field per metric because each extractor of the
  * composite fills in only the metrics it is able to compute: a class is measured by several extractors
@@ -34,6 +35,21 @@ public class ClassMetrics {
      */
     @Getter
     private final String className;
+
+    /**
+     * Whether the class held at least one defect at the release these measures were taken on, i.e.
+     * the variable a model trained on this dataset is asked to predict.
+     * <p>
+     * It is kept apart from the measures, and is no {@link Metric}, because no extractor of the
+     * composite can produce it: every metric is something read off the class itself, whereas being
+     * buggy is something the defect reports and the commits that closed them say about it. It is
+     * written once, by
+     * {@link it.uniroma2.dicii.isw2.buggyness.BuggynessLabeller#label(it.uniroma2.dicii.isw2.versions.model.Version, MetricsReport)},
+     * after every extractor has run.
+     */
+    @Getter
+    @Setter
+    private boolean buggy;
 
     private final Map<Metric, Double> values = new EnumMap<>(Metric.class);
 
@@ -69,7 +85,7 @@ public class ClassMetrics {
      * Records all the given values at once, replacing the ones previously recorded for the same
      * metrics. Used to merge into this class the measures another extractor took on it.
      *
-     * @param measures the values to record
+     * @param measures the values to recordDefect
      */
     public void setAll(Map<Metric, Double> measures) {
         values.putAll(measures);

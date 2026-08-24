@@ -26,7 +26,8 @@ import static org.junit.Assert.assertTrue;
 /**
  * Checks the shape of the file the dataset is written to: every row describes one class of one
  * released version, is named by those two alone, carries a field per metric whether it was measured
- * or not, and reaches the disk as soon as the version it belongs to has been measured.
+ * or not, ends with the buggy/not-buggy label, and reaches the disk as soon as the version it belongs
+ * to has been measured.
  */
 public class CsvDatasetWriterTest {
 
@@ -35,7 +36,12 @@ public class CsvDatasetWriterTest {
      */
     private static final int IDENTITY_COLUMNS = 2;
 
-    private static final int COLUMNS = IDENTITY_COLUMNS + Metric.values().length;
+    /**
+     * The single column holding the label, after the ones holding the measures.
+     */
+    private static final int LABEL_COLUMNS = 1;
+
+    private static final int COLUMNS = IDENTITY_COLUMNS + Metric.values().length + LABEL_COLUMNS;
 
     private static final String FIRST_PATH = "src/main/java/sample/First.java";
     private static final String SECOND_PATH = "src/main/java/sample/Second.java";
@@ -61,7 +67,7 @@ public class CsvDatasetWriterTest {
     }
 
     @Test
-    public void testTheHeaderNamesTheIdentityColumnsAndEveryMetric() throws DatasetException, IOException {
+    public void testTheHeaderNamesTheIdentityColumnsEveryMetricAndTheLabel() throws DatasetException, IOException {
         try (CsvDatasetWriter dataset = CsvDatasetWriter.open(file)) {
             assertEquals(0, dataset.getRows());
         }
@@ -74,6 +80,42 @@ public class CsvDatasetWriterTest {
         for (int i = 0; i < Metric.values().length; i++) {
             assertEquals(Metric.values()[i].name(), header[IDENTITY_COLUMNS + i]);
         }
+        assertEquals("Buggy", header[COLUMNS - 1]);
+    }
+
+    /**
+     * The label is what a model reading this dataset is trained to predict, so it is the last column
+     * of a row, after every measure.
+     */
+    @Test
+    public void testTheLastColumnSaysWhetherTheClassHeldADefect() throws DatasetException, IOException {
+        MetricsReport report = new MetricsReport();
+        report.forClass(FIRST_PATH, "sample.First").set(Metric.LOC, 42);
+        report.forPath(FIRST_PATH).setBuggy(true);
+        report.forClass(SECOND_PATH, "sample.Second").set(Metric.LOC, 13);
+
+        write(version("3.5.0", 1), report);
+
+        assertEquals("1", label(lines().get(1)));
+        assertEquals("0", label(lines().get(2)));
+    }
+
+    /**
+     * A metric no extractor could measure is unknown and is left empty, but a class no defect was ever
+     * fixed in is known not to have held one. Writing the label empty as well would leave a learner
+     * unable to tell "not buggy" from "nobody looked", and every row of a project without defects
+     * would read as missing data.
+     */
+    @Test
+    public void testAClassNoDefectTouchedIsLabelledZeroRatherThanLeftEmpty() throws DatasetException, IOException {
+        MetricsReport report = new MetricsReport();
+        report.forClass(FIRST_PATH, "sample.First").set(Metric.LOC, 42);
+
+        write(version("3.5.0", 1), report);
+
+        String[] row = lines().get(1).split(",", -1);
+        assertEquals("", cell(row, Metric.BS));
+        assertEquals("0", row[COLUMNS - 1]);
     }
 
     /**
@@ -292,6 +334,14 @@ public class CsvDatasetWriterTest {
      */
     private static String cell(String[] row, Metric metric) {
         return row[IDENTITY_COLUMNS + metric.ordinal()];
+    }
+
+    /**
+     * @param row a row of the dataset
+     * @return the label it ends with
+     */
+    private static String label(String row) {
+        return row.substring(row.lastIndexOf(',') + 1);
     }
 
     private static Version version(String name, int index) {

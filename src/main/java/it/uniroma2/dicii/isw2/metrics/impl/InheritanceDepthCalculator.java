@@ -241,7 +241,7 @@ class InheritanceDepthCalculator {
 
     /**
      * Reads the superclass of a type, which only a class can have: an interface, an enumeration, a
-     * record or an annotation is one level below the root and nothing more, whatever it extends or
+     * recordDefect or an annotation is one level below the root and nothing more, whatever it extends or
      * implements.
      *
      * @param unit the syntax tree of the source file declaring the type

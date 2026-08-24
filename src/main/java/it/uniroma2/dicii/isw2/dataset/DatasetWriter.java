@@ -20,10 +20,12 @@ import it.uniroma2.dicii.isw2.versions.model.Version;
 public interface DatasetWriter extends AutoCloseable {
 
     /**
-     * Appends to the dataset one row per class of a released version.
+     * Appends to the dataset one row per class of a released version. The report is expected to
+     * arrive already labelled: a writer neither decides whether a class held a defect nor knows where
+     * that answer came from.
      *
      * @param version the released version the measures were taken on
-     * @param report  the measures taken on its classes
+     * @param report  the measures taken on its classes, and the label each of them carries
      * @throws DatasetException if the rows cannot be written
      */
     void write(Version version, MetricsReport report) throws DatasetException;

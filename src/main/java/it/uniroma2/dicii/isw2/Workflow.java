@@ -3,6 +3,9 @@ package it.uniroma2.dicii.isw2;
 import it.uniroma2.dicii.isw2.association.VersionTagAssociator;
 import it.uniroma2.dicii.isw2.association.impl.JiraGitAssociator;
 import it.uniroma2.dicii.isw2.association.impl.VersionTagAssociatorImpl;
+import it.uniroma2.dicii.isw2.buggyness.BuggynessLabeller;
+import it.uniroma2.dicii.isw2.buggyness.exception.BuggynessException;
+import it.uniroma2.dicii.isw2.buggyness.impl.AffectedVersionsLabeller;
 import it.uniroma2.dicii.isw2.dataset.DatasetWriter;
 import it.uniroma2.dicii.isw2.dataset.exception.DatasetException;
 import it.uniroma2.dicii.isw2.dataset.impl.CsvDatasetWriter;
@@ -26,6 +29,7 @@ import it.uniroma2.dicii.isw2.metrics.impl.JavaParserExtractor;
 import it.uniroma2.dicii.isw2.metrics.impl.JavaVersionDetector;
 import it.uniroma2.dicii.isw2.metrics.impl.PMDExtractor;
 import it.uniroma2.dicii.isw2.metrics.impl.PathSourceFilter;
+import it.uniroma2.dicii.isw2.metrics.model.MetricsReport;
 import it.uniroma2.dicii.isw2.metrics.model.Snapshot;
 import it.uniroma2.dicii.isw2.properties.PropertiesManager;
 import it.uniroma2.dicii.isw2.proportion.ProportionStrategy;
@@ -115,8 +119,9 @@ public class Workflow {
             // 7. Estimate the injected version of the issues that do not report a usable one
             applyProportion(issues, versions);
 
-            // 8. Extract the class-level metrics of every released version, writing them to the dataset
-            extractMetrics(versions, bugFixCommits);
+            // 8. Extract the class-level metrics of every released version, label its classes buggy
+            //    or not, and write them to the dataset
+            extractMetrics(versions, associations, bugFixCommits);
 
             log.info("Workflow completed successfully!");
         } catch (VersionsException e) {
@@ -125,6 +130,8 @@ public class Workflow {
             log.error("Error retrieving issues from Jira", e);
         } catch (ProportionException e) {
             log.error("Error estimating the injected versions of the issues", e);
+        } catch (BuggynessException e) {
+            log.error("Error reading which classes the defects were fixed in", e);
         } catch (DatasetException e) {
             log.error("Error writing the dataset", e);
         }
@@ -277,8 +284,9 @@ public class Workflow {
      * Estimates the injected version of the issues that do not report a usable one, applying the variant
      * of the Proportion approach configured through the {@code project.proportion.method} property.
      * <p>
-     * The issues are modified in place: each of them gets its opening version, and the ones whose
-     * injected version had to be estimated also get their injected version and their affected versions.
+     * The issues are modified in place: each of them gets its opening version, its injected version —
+     * the one it reports, or the estimate when it reports none usable — and its affected versions,
+     * relabelled as the whole range from the injected version to the fixed one.
      *
      * @param issues   the issues to label
      * @param versions the released versions of the project, already associated with their Git tags
@@ -291,8 +299,14 @@ public class Workflow {
     }
 
     /**
-     * Extracts the class-level metrics of every released version of the project and writes them to the
-     * dataset.
+     * Extracts the class-level metrics of every released version of the project, labels each of its
+     * classes buggy or not, and writes the rows to the dataset.
+     * <p>
+     * Which classes held a defect is read out of the repository before a single version is measured,
+     * rather than while the first one is: measuring a version costs minutes, and a run that only
+     * discovered it could not read the defects after having measured one would either be abandoned
+     * halfway through or write out release after release whose label column is all zeros for a reason
+     * the file does not recordDefect.
      * <p>
      * The repository is checked out at the commit each version is tagged on, so that the sources being
      * measured are the ones the version was released with, and the whole set of extractors is then run
@@ -307,15 +321,25 @@ public class Workflow {
      * worth keeping when a later one cannot be.
      *
      * @param versions      the released versions of the project, already associated with their Git tags
+     * @param associations  the commits referencing each of the bug tickets retrieved from Jira
      * @param bugFixCommits the identifiers of the commits that fixed one of the bugs retrieved from Jira
-     * @throws DatasetException if the dataset cannot be written
+     * @throws BuggynessException if the fixes of the defects cannot be read out of the repository
+     * @throws DatasetException   if the dataset cannot be written
      */
-    private void extractMetrics(List<Version> versions, Set<String> bugFixCommits) throws DatasetException {
-        MetricsExtractor extractor = buildExtractor(versions, bugFixCommits);
+    private void extractMetrics(List<Version> versions, Map<Issue, List<Commit>> associations,
+                                Set<String> bugFixCommits) throws BuggynessException, DatasetException {
+        // The very same filter is handed to every extractor and to the labeller: measuring the same
+        // set of sources is what lets the composite check, at the end of each version, that they all
+        // described the same classes, and labelling that same set is what keeps the label about the
+        // classes that were measured
+        SourceFilter filter = new PathSourceFilter(excludedDirectories, excludedFiles);
+        MetricsExtractor extractor = buildExtractor(versions, bugFixCommits, filter);
+        BuggynessLabeller labeller = AffectedVersionsLabeller.reading(
+                repoBasePath.resolve(projectName), versions, associations, filter);
         Path datasetFile = datasetDirectory.resolve(projectName + ".csv");
         int measured;
         try (DatasetWriter dataset = CsvDatasetWriter.open(datasetFile)) {
-            measured = measureVersions(versions, extractor, dataset);
+            measured = measureVersions(versions, extractor, labeller, dataset);
         }
         log.info("Extracted the class-level metrics of {} versions out of {}", measured, versions.size());
     }
@@ -326,13 +350,13 @@ public class Workflow {
      *
      * @param versions      the released versions of the project, already associated with their Git tags
      * @param bugFixCommits the identifiers of the commits that fixed one of the bugs retrieved from Jira
+     * @param filter        the rule telling which sources are rows of the dataset, shared with every
+     *                      child of the composite and with the labeller
      * @return the extractor to run on the snapshot of each version
      */
-    private MetricsExtractor buildExtractor(List<Version> versions, Set<String> bugFixCommits) {
+    private MetricsExtractor buildExtractor(List<Version> versions, Set<String> bugFixCommits,
+                                            SourceFilter filter) {
         Path repoPath = repoBasePath.resolve(projectName);
-        // The very same filter is handed to every child: measuring the same set of sources is what lets
-        // the composite check, at the end of each version, that they all described the same classes
-        SourceFilter filter = new PathSourceFilter(excludedDirectories, excludedFiles);
         CompositeMetricsExtractor extractor = new CompositeMetricsExtractor()
                 .add(new CKExtractor(filter))
                 .add(new JavaParserExtractor(filter));
@@ -357,12 +381,14 @@ public class Workflow {
      *
      * @param versions  the released versions of the project, already associated with their Git tags
      * @param extractor the extractor to run on the snapshot of each of them
+     * @param labeller  what tells the classes of each of them that held a defect from the ones that
+     *                  did not
      * @param dataset   where the rows are written
      * @return how many versions could be measured
      * @throws DatasetException if the rows of a version cannot be written
      */
-    private int measureVersions(List<Version> versions, MetricsExtractor extractor, DatasetWriter dataset)
-            throws DatasetException {
+    private int measureVersions(List<Version> versions, MetricsExtractor extractor,
+                                BuggynessLabeller labeller, DatasetWriter dataset) throws DatasetException {
         Path repoPath = repoBasePath.resolve(projectName);
         RepoManager repoManager = new GitRepoManager();
         int measured = 0;
@@ -372,9 +398,11 @@ public class Workflow {
             version = versions.get(i);
             try {
                 repoManager.checkoutAtCommit(repoPath, version.getCommitId());
-                dataset.write(version, extractor.extract(new Snapshot(repoPath, version)));
+                MetricsReport report = extractor.extract(new Snapshot(repoPath, version));
+                labeller.label(version, report);
+                dataset.write(version, report);
                 measured++;
-            } catch (RepoException | MetricsException e) {
+            } catch (RepoException | MetricsException | BuggynessException e) {
                 log.error("Unable to extract the metrics of version {}. Skipping it...", version.getName(), e);
             }
         }
