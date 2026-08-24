@@ -22,11 +22,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.ZonedDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
@@ -51,6 +49,8 @@ public class AffectedVersionsLabellerTest {
     private static final String SOUND = "app.Sound";
 
     private static final String SOURCE = "package app;\nclass Broken {\n}\n";
+
+    private static final ZoneId ZONE_ID = ZoneId.of("Europe/Rome");
 
     @Rule
     public TemporaryFolder folder = new TemporaryFolder();
@@ -185,7 +185,7 @@ public class AffectedVersionsLabellerTest {
      * @return a defect report affecting those releases
      */
     private Issue defect(String key, int... affected) {
-        Issue issue = new Issue(key, LocalDateTime.now(), LocalDateTime.now(), key, IssueType.BUG,
+        Issue issue = new Issue(key, LocalDateTime.now(ZONE_ID), LocalDateTime.now(ZONE_ID), key, IssueType.BUG,
                 "assignee", ResolutionType.FIXED, key, IssueStatus.CLOSED);
         List<Version> affectedVersions = new ArrayList<>();
         for (int index : affected) {
@@ -223,7 +223,7 @@ public class AffectedVersionsLabellerTest {
     }
 
     private static Commit commitOf(String id) {
-        return new Commit(id, "message", "message", "Alice", "alice@example.com", ZonedDateTime.now(),
+        return new Commit(id, "message", "message", "Alice", "alice@example.com", ZonedDateTime.now(ZONE_ID),
                 new ArrayList<>());
     }
 }

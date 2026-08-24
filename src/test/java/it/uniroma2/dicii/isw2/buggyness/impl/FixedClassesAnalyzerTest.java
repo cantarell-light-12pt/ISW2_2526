@@ -20,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.*;
 
@@ -47,6 +48,8 @@ public class FixedClassesAnalyzerTest {
     private static final String SOURCE = "package app;\nclass Broken {\n}\n";
     private static final String FIXED_SOURCE = "package app;\nclass Broken {\n// fixed\n}\n";
 
+    private static final ZoneId ZONE_ID = ZoneId.of("Europe/Rome");
+    
     @Rule
     public TemporaryFolder folder = new TemporaryFolder();
 
@@ -69,11 +72,11 @@ public class FixedClassesAnalyzerTest {
     }
 
     private static Issue defect(String key) {
-        return new Issue(key, LocalDateTime.now(), LocalDateTime.now(), key, IssueType.BUG, "assignee", ResolutionType.FIXED, key, IssueStatus.CLOSED);
+        return new Issue(key, LocalDateTime.now(ZONE_ID), LocalDateTime.now(ZONE_ID), key, IssueType.BUG, "assignee", ResolutionType.FIXED, key, IssueStatus.CLOSED);
     }
 
     private static Commit commitOf(String id) {
-        return new Commit(id, "message", "message", "Alice", "alice@example.com", ZonedDateTime.now(), new ArrayList<>());
+        return new Commit(id, "message", "message", "Alice", "alice@example.com", ZonedDateTime.now(ZONE_ID), new ArrayList<>());
     }
 
     private static void write(Path repoPath, String path, String content) throws IOException {
