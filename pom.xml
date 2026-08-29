@@ -23,6 +23,7 @@
         <jackson.version>3.1.3</jackson.version>
         <junit.version>4.13.2</junit.version>
         <okhttp.version>5.3.2</okhttp.version>
+        <weka.version>3.8.7</weka.version>
     </properties>
 
     <dependencyManagement>
@@ -136,6 +137,17 @@
         <dependency>
             <groupId>com.squareup.okhttp3</groupId>
             <artifactId>okhttp-jvm</artifactId>
+        </dependency>
+
+        <!-- Weka, reading the dataset and training and cross-validating the models measured on it. The
+             version is the one of the local installation, so that a figure reported by a run here and
+             one read off the Explorer are the answers of the same engine. Its GUI artefacts come along
+             unused: weka.core.WekaPackageManager reaches into weka.gui on paths the headless classes
+             reach as well, so excluding them buys a NoClassDefFoundError -->
+        <dependency>
+            <groupId>nz.ac.waikato.cms.weka</groupId>
+            <artifactId>weka-stable</artifactId>
+            <version>${weka.version}</version>
         </dependency>
     </dependencies>
 

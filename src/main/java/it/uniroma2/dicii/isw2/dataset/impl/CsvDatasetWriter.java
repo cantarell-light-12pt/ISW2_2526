@@ -57,10 +57,11 @@ public class CsvDatasetWriter implements DatasetWriter {
      * artefact of the numbering the Proportion method needs, and the path names the same class
      * differently across the releases that moved it, so neither identifies anything on its own.
      * <p>
-     * Visible to the package, since a reader of this file has to drop exactly the columns written here
-     * and cannot be left to name them a second time.
+     * Public, since a reader of this file has to drop exactly the columns written here, and a split cut
+     * at a release has to find the one naming it — neither can be left to name them a second time. The
+     * list is immutable, so publishing it publishes the contract and nothing else.
      */
-    static final List<String> IDENTITY_COLUMNS = List.of("Version", "ClassName");
+    public static final List<String> IDENTITY_COLUMNS = List.of("Version", "ClassName");
 
     /**
      * The column holding the buggy/not-buggy label, written after every measure.
