@@ -56,19 +56,22 @@ public class CsvDatasetWriter implements DatasetWriter {
      * ordinal index of the version and the path of the source file are left out — the index is an
      * artefact of the numbering the Proportion method needs, and the path names the same class
      * differently across the releases that moved it, so neither identifies anything on its own.
+     * <p>
+     * Visible to the package, since a reader of this file has to drop exactly the columns written here
+     * and cannot be left to name them a second time.
      */
-    private static final List<String> IDENTITY_COLUMNS = List.of("Version", "ClassName");
+    static final List<String> IDENTITY_COLUMNS = List.of("Version", "ClassName");
 
     /**
      * The column holding the buggy/not-buggy label, written after every measure.
      */
-    private static final String LABEL_COLUMN = "Buggy";
+    static final String LABEL_COLUMN = "Buggy";
 
     /**
      * How the label reads. Numbers rather than {@code true}/{@code false}, so that the column can be
      * read as the binary variable it is without a conversion nobody would think to check.
      */
-    private static final String BUGGY = "1";
+    static final String BUGGY = "1";
     private static final String NOT_BUGGY = "0";
 
     private final Path file;

@@ -8,7 +8,9 @@ import it.uniroma2.dicii.isw2.buggyness.exception.BuggynessException;
 import it.uniroma2.dicii.isw2.buggyness.impl.AffectedVersionsLabeller;
 import it.uniroma2.dicii.isw2.dataset.DatasetWriter;
 import it.uniroma2.dicii.isw2.dataset.exception.DatasetException;
+import it.uniroma2.dicii.isw2.dataset.impl.CompositeDatasetWriter;
 import it.uniroma2.dicii.isw2.dataset.impl.CsvDatasetWriter;
+import it.uniroma2.dicii.isw2.dataset.impl.FirstReleasesDatasetWriter;
 import it.uniroma2.dicii.isw2.issues.IssuesRetriever;
 import it.uniroma2.dicii.isw2.issues.exception.IssueException;
 import it.uniroma2.dicii.isw2.issues.filter.IssueFilter;
@@ -59,6 +61,18 @@ import java.util.stream.Collectors;
 @Slf4j
 public class Workflow {
 
+    /**
+     * How the dataset holding every released version is named, after the project it describes.
+     */
+    private static final String DATASET_SUFFIX = ".csv";
+
+    /**
+     * How the dataset trimmed to the earliest releases is named. A second file beside the first,
+     * rather than in place of it: the whole history is hours of mining, and it is what the trimmed
+     * dataset is read against.
+     */
+    private static final String TRIMMED_SUFFIX = "-trimmed.csv";
+
     private final String projectName;
     private final String jiraVersionUrl;
     private final String jiraIssuesUrl;
@@ -74,6 +88,7 @@ public class Workflow {
     private final String pmdDefaultJavaVersion;
     private final long pmdTimeoutSeconds;
     private final Path datasetDirectory;
+    private final double datasetTrimFraction;
 
     public Workflow() {
         this.projectName = PropertiesManager.getInstance().getProperty("project.name");
@@ -93,6 +108,7 @@ public class Workflow {
         this.pmdDefaultJavaVersion = PropertiesManager.getInstance().getProperty("project.metrics.pmd.defaultJavaVersion");
         this.pmdTimeoutSeconds = Long.parseLong(PropertiesManager.getInstance().getProperty("project.metrics.pmd.timeoutSeconds"));
         this.datasetDirectory = Path.of(PropertiesManager.getInstance().getProperty("project.dataset.outputDirectory"));
+        this.datasetTrimFraction = Double.parseDouble(PropertiesManager.getInstance().getProperty("project.dataset.trimFraction"));
     }
 
     public void execute() {
@@ -319,6 +335,12 @@ public class Workflow {
      * The rows of a version are handed to the writer as soon as it has been measured, rather than when
      * every version has: measuring the whole history takes hours, and the versions already analysed are
      * worth keeping when a later one cannot be.
+     * <p>
+     * Two datasets come out of the one set of measures: the whole release history, and the same rows
+     * trimmed to the earliest {@code project.dataset.trimFraction} of the releases. Both are written as
+     * the run goes rather than by reading the first back at the end, which is the invariant
+     * {@link DatasetWriter} is built around and costs nothing here — the trimmed releases are the ones
+     * measured first, so that file is complete a third of the way into the run.
      *
      * @param versions      the released versions of the project, already associated with their Git tags
      * @param associations  the commits referencing each of the bug tickets retrieved from Jira
@@ -336,12 +358,20 @@ public class Workflow {
         MetricsExtractor extractor = buildExtractor(versions, bugFixCommits, filter);
         BuggynessLabeller labeller = AffectedVersionsLabeller.reading(
                 repoBasePath.resolve(projectName), versions, associations, filter);
-        Path datasetFile = datasetDirectory.resolve(projectName + ".csv");
+        int trimmedReleases = FirstReleasesDatasetWriter.fractionOf(versions.size(), datasetTrimFraction);
         int measured;
-        try (DatasetWriter dataset = CsvDatasetWriter.open(datasetFile)) {
+        // Built inside the try-with-resources holding it, one file at a time: opening the second is
+        // what may fail, and the composite already owns the first one by the time it does
+        CompositeDatasetWriter dataset = new CompositeDatasetWriter();
+        try (dataset) {
+            dataset.add(CsvDatasetWriter.open(datasetDirectory.resolve(projectName + DATASET_SUFFIX)));
+            dataset.add(new FirstReleasesDatasetWriter(
+                    CsvDatasetWriter.open(datasetDirectory.resolve(projectName + TRIMMED_SUFFIX)),
+                    trimmedReleases));
             measured = measureVersions(versions, extractor, labeller, dataset);
         }
-        log.info("Extracted the class-level metrics of {} versions out of {}", measured, versions.size());
+        log.info("Extracted the class-level metrics of {} versions out of {}, the {} earliest of which "
+                + "the trimmed dataset holds", measured, versions.size(), trimmedReleases);
     }
 
     /**
