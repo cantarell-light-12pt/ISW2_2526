@@ -1,3 +1,4 @@
+[![Quality gate status](https://sonarcloud.io/api/project_badges/measure?project=cantarell-light-12pt_ISW2_2526&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=cantarell-light-12pt_ISW2_2526)
 # ISW2_2526
 Repo for the ISW2 course project, a.a. 2025/2026
 
