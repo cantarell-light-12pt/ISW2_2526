@@ -39,7 +39,10 @@ public record MlSettings(List<ClassifierKind> classifiers, double trainingFracti
         }
         // Copied, so that the list the settings were built from cannot be written into behind them
         classifiers = List.copyOf(classifiers);
-        if (!(trainingFraction >= 0 && trainingFraction <= 1)) {
+        // Written as what is rejected rather than as the negation of what is accepted, so that it reads
+        // as the sentence below it. NaN fails every comparison, so it falls through neither test and is
+        // rejected here as well
+        if (!(trainingFraction > 0 && trainingFraction < 1)) {
             throw new IllegalArgumentException("A model is trained on some of the releases and tested "
                     + "on the rest, so the training fraction lies strictly between 0 and 1, not "
                     + trainingFraction);

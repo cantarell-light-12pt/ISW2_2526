@@ -24,12 +24,11 @@ public class HoldOutTesterTest {
     private static final int TRAINING_ROWS = 60;
     private static final int TEST_ROWS = 40;
 
-    private MlSettings settings;
     private ModelTester tester;
 
     @Before
     public void setUp() {
-        settings = SyntheticInstances.settings();
+        MlSettings settings = SyntheticInstances.settings();
         tester = new HoldOutTester(new WekaClassifierFactory(settings), settings);
     }
 

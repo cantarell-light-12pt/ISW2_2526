@@ -7,6 +7,7 @@ import weka.core.DenseInstance;
 import weka.core.Instances;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Random;
 
@@ -38,6 +39,12 @@ final class SyntheticInstances {
      */
     static final String BUGGY = "1";
     static final String NOT_BUGGY = "0";
+
+    /**
+     * The two values of the label, in the order an attribute declares them — which is what a row's
+     * class value is an index into.
+     */
+    private static final List<String> LABELS = List.of(NOT_BUGGY, BUGGY);
 
     private SyntheticInstances() {
         // Builds instances, and holds none
@@ -75,8 +82,7 @@ final class SyntheticInstances {
         ArrayList<Attribute> attributes = new ArrayList<>();
         attributes.add(new Attribute(SIGNAL));
         NOISE.forEach(name -> attributes.add(new Attribute(name)));
-        ArrayList<String> labels = new ArrayList<>(List.of(NOT_BUGGY, BUGGY));
-        attributes.add(new Attribute("Buggy", labels));
+        attributes.add(new Attribute("Buggy", new ArrayList<>(LABELS)));
         Instances data = new Instances("synthetic", attributes, rows);
         data.setClassIndex(attributes.size() - 1);
         Random random = new Random(7);
@@ -89,7 +95,7 @@ final class SyntheticInstances {
             for (int noise = 0; noise < NOISE.size(); noise++) {
                 values[1 + noise] = random.nextDouble() * 10;
             }
-            values[attributes.size() - 1] = labels.indexOf(buggy ? BUGGY : NOT_BUGGY);
+            values[attributes.size() - 1] = LABELS.indexOf(buggy ? BUGGY : NOT_BUGGY);
             data.add(new DenseInstance(1.0, values));
         }
         return data;
@@ -106,6 +112,20 @@ final class SyntheticInstances {
      * @return the rows, with a Version and a ClassName column in front of the metrics
      */
     static Instances withReleases(List<String> releases, int rowsPerRelease, boolean contiguous) {
+        Instances data = releaseHeader(releases, rowsPerRelease);
+        Random random = new Random(7);
+        for (int[] row : rowOrder(releases.size(), rowsPerRelease, contiguous)) {
+            data.add(releaseRow(data.numAttributes(), row[0], row[1], random));
+        }
+        return data;
+    }
+
+    /**
+     * @param releases       the releases the dataset names
+     * @param rowsPerRelease how many classes each of them holds
+     * @return the dataset with no rows in it yet, its columns declared and its class set
+     */
+    private static Instances releaseHeader(List<String> releases, int rowsPerRelease) {
         ArrayList<String> classNames = new ArrayList<>();
         for (int i = 0; i < rowsPerRelease; i++) {
             classNames.add("sample.Class" + i);
@@ -115,32 +135,57 @@ final class SyntheticInstances {
         attributes.add(new Attribute("ClassName", classNames));
         attributes.add(new Attribute(SIGNAL));
         NOISE.forEach(name -> attributes.add(new Attribute(name)));
-        ArrayList<String> labels = new ArrayList<>(List.of(NOT_BUGGY, BUGGY));
-        attributes.add(new Attribute("Buggy", labels));
-
+        attributes.add(new Attribute("Buggy", new ArrayList<>(LABELS)));
         Instances data = new Instances("synthetic", attributes, releases.size() * rowsPerRelease);
         data.setClassIndex(attributes.size() - 1);
-        Random random = new Random(7);
-        // Interleaved means walking the classes on the outside, so each release's rows end up scattered
-        int outer = contiguous ? releases.size() : rowsPerRelease;
-        int inner = contiguous ? rowsPerRelease : releases.size();
-        for (int i = 0; i < outer; i++) {
-            for (int j = 0; j < inner; j++) {
-                int release = contiguous ? i : j;
-                int className = contiguous ? j : i;
-                boolean buggy = (release + className) % 3 == 0;
-                double[] values = new double[attributes.size()];
-                values[0] = release;
-                values[1] = className;
-                values[2] = (buggy ? 10 : 0) + random.nextDouble();
-                for (int noise = 0; noise < NOISE.size(); noise++) {
-                    values[3 + noise] = random.nextDouble() * 10;
-                }
-                values[attributes.size() - 1] = labels.indexOf(buggy ? BUGGY : NOT_BUGGY);
-                data.add(new DenseInstance(1.0, values));
+        return data;
+    }
+
+    /**
+     * Decides which release and which class each row describes, and in what order the rows are written.
+     * <p>
+     * Separated from the building of the rows so that the two questions stay apart: this one is the
+     * whole of what {@code contiguous} means, and the row below it is the same row either way.
+     *
+     * @param releases   how many releases there are
+     * @param classes    how many classes each of them holds
+     * @param contiguous whether a release's rows sit together, as a file written release by release
+     *                   holds them, or are scattered as no such file would
+     * @return one {@code {release, class}} pair per row, in the order the rows are written
+     */
+    private static List<int[]> rowOrder(int releases, int classes, boolean contiguous) {
+        List<int[]> order = new ArrayList<>(releases * classes);
+        for (int release = 0; release < releases; release++) {
+            for (int className = 0; className < classes; className++) {
+                order.add(new int[] {release, className});
             }
         }
-        return data;
+        if (!contiguous) {
+            // Grouped by class instead, which scatters each release's rows through the file. The sort
+            // is stable, so the releases of a class stay in the order they were published in
+            order.sort(Comparator.comparingInt(row -> row[1]));
+        }
+        return order;
+    }
+
+    /**
+     * @param attributes how many columns a row has
+     * @param release    which release it describes
+     * @param className  which class of it
+     * @param random     what the noise is drawn from
+     * @return the row, labelled, with its signal attribute giving the label away
+     */
+    private static DenseInstance releaseRow(int attributes, int release, int className, Random random) {
+        boolean buggy = (release + className) % 3 == 0;
+        double[] values = new double[attributes];
+        values[0] = release;
+        values[1] = className;
+        values[2] = (buggy ? 10 : 0) + random.nextDouble();
+        for (int noise = 0; noise < NOISE.size(); noise++) {
+            values[3 + noise] = random.nextDouble() * 10;
+        }
+        values[attributes - 1] = LABELS.indexOf(buggy ? BUGGY : NOT_BUGGY);
+        return new DenseInstance(1.0, values);
     }
 
     /**
