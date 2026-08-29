@@ -45,3 +45,28 @@ These metrics quantity the number of code smells detected in a class, according 
 - **Number of Medium Smells** (MS): the number of medium-severity code smells detected in the class.
 - **Number of Minor Smells** (LS): the number of low-severity code smells detected in the class.
 - **Number of Info Smells** (IS): the number of info-severity code smells detected in the class.
+
+## Milestone 2: Defect prediction
+This milestone trains a classifier on the dataset built in Milestone 1 and measures how well it predicts which classes are faulty.
+
+The model is trained on the **trimmed** dataset, i.e. the earliest third of the releases. The buggy label of a release is only as good as the defects reported against it, and the most recent releases have had the least time to have any reported: learning from the tail would be learning that the recent releases are clean, which is a fact about the calendar rather than about the code.
+
+That dataset is then split in two, at a release and never at a row: the earliest **two thirds** of the releases are what the models are trained on, and the remaining third is held back to test them on. Cutting at a release is what makes every training row older than every test row, which is the only arrangement under which the result means "how well would this have predicted what came next". A random row split would instead let a model read a class's future — the same class one release later, barely changed and carrying the answer — which is information no predictor could ever have had.
+
+The run then has two measured phases:
+- **Validation**: each model is cross-validated by **10-fold cross validation** over the training releases alone, on folds stratified so that each holds the buggy share of the whole. This is what one model is chosen over another by; confining it to the training releases is what stops choosing from spending the test set.
+- **Inference**: each model is then trained on all of the training releases and asked about the held-out ones, which nothing has read until this point.
+
+Both phases compute the following metrics, reported side by side in a single CSV file:
+- **Accuracy**: the share of classes labelled correctly.
+- **Precision**: of the classes predicted buggy, how many were.
+- **Recall**: of the buggy classes, how many were found.
+- **F1**: the harmonic mean of precision and recall.
+- **AUC**: the area under the ROC curve, i.e. how well the model separates the two classes at any threshold.
+- **Kappa**: the agreement with the truth over and above what guessing at the observed rates would reach.
+
+Precision, recall, F1 and AUC are of the **buggy** class alone rather than averaged over the two. Around 23% of the rows are buggy, so a model answering "not buggy" to every class already scores 77% accuracy while finding nothing at all, and only the figures of the minority class say so.
+
+The test figures are expected to be the lower pair, and the distance between the two phases is itself a result: it is how much of the validation score was the model recognising classes it had already met rather than recognising faults.
+
+Which classifiers are trained is configuration rather than code (`project.ml.classifiers`), so that the comparison can be extended to several models, and the workflow takes the rows to train on as an argument, so that it can equally be run over a dataset reduced by feature selection.
