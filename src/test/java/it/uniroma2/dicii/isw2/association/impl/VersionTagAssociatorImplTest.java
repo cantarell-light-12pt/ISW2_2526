@@ -43,22 +43,48 @@ public class VersionTagAssociatorImplTest {
     }
 
     /**
-     * Jira records the day somebody marked a version released, which is not the moment the release was
-     * cut; the tag points at the very commit it was built from. Mixing the two sources would leave the
-     * history half dated by Jira and half by Git, ordering neither half against the other.
+     * A tag is dated by the commit it points at, which is not always the one the release was built
+     * from: ZooKeeper's releases 3.0.0 to 3.3.2 are tagged on the commits that moved them out of
+     * Subversion, all dated 2010-11-24T21:19:37, whereas Jira dates each of them on the day it was
+     * published.
      */
     @Test
-    public void theDateOfTheTagReplacesTheOneReportedByJira() {
-        Version version = version("3.6.0");
-        version.setReleaseDate(LocalDateTime.of(2020, 3, 4, 0, 0));
+    public void theDateReportedByJiraIsKept() {
+        Version version = version("3.2.0");
+        version.setReleaseDate(LocalDateTime.of(2009, 7, 8, 0, 0));
         List<Version> versions = new ArrayList<>(List.of(version));
 
-        associate(List.of(tag("3.6.0", at(2020, 2, 25, 14, 17, ZoneOffset.UTC))), versions);
+        associate(List.of(tag("3.2.0", at(2010, 11, 24, 21, 19, ZoneOffset.UTC))), versions);
 
-        Assert.assertEquals("The tag must overwrite the release date Jira reported",
-                LocalDateTime.of(2020, 2, 25, 14, 17), version.getReleaseDate());
+        Assert.assertEquals("The tag must not overwrite the release date Jira reported",
+                LocalDateTime.of(2009, 7, 8, 0, 0), version.getReleaseDate());
     }
 
+    /**
+     * The tags of the releases moved out of Subversion all share one date, so ordering them by it
+     * would leave the name to decide; ordering them by the dates Jira reports puts 3.1.2, published
+     * in December 2009, after 3.2.1, published three months earlier.
+     */
+    @Test
+    public void releasesSharingTheDateOfTheirTagsAreOrderedByTheDatesJiraReports() {
+        Version maintenance = version("3.1.2");
+        maintenance.setReleaseDate(LocalDateTime.of(2009, 12, 14, 0, 0));
+        Version minor = version("3.2.1");
+        minor.setReleaseDate(LocalDateTime.of(2009, 9, 4, 0, 0));
+        List<Version> versions = new ArrayList<>(Arrays.asList(maintenance, minor));
+
+        associate(Arrays.asList(tag("3.1.2", at(2010, 11, 24, 21, 19, ZoneOffset.UTC)),
+                tag("3.2.1", at(2010, 11, 24, 21, 19, ZoneOffset.UTC))), versions);
+        Version.numberVersions(versions);
+
+        Assert.assertEquals(1, minor.getIndex());
+        Assert.assertEquals(2, maintenance.getIndex());
+    }
+
+    /**
+     * ZooKeeper's 3.6.0 is released and tagged, and yet Jira reports no date for it: left undated, it
+     * would sort after every other release.
+     */
     @Test
     public void theDateOfTheTagFillsInTheOneJiraDidNotReport() {
         Version version = version("3.6.0");
@@ -71,8 +97,8 @@ public class VersionTagAssociatorImplTest {
 
     /**
      * The committers of a project of this size are spread across the world, and ZooKeeper's release tags
-     * carry offsets from -07:00 to +05:30. Reading the local time of a tag would order the releases by
-     * the wall clock of whoever cut them.
+     * carry offsets from -07:00 to +05:30. Reading the local time of the tag a version Jira left undated
+     * falls back on would order it by the wall clock of whoever cut it.
      */
     @Test
     public void theDateOfTheTagIsNormalisedToUtc() {

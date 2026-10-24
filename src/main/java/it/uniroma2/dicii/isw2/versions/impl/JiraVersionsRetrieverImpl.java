@@ -48,10 +48,10 @@ public class JiraVersionsRetrieverImpl implements VersionsRetriever {
      * each version is assigned its 1-based ordinal index, since Jira only provides the version name
      * and id.
      * <p>
-     * Both the dates and the numbering are provisional. Jira records the day somebody marked a version
-     * released, at the granularity of a day and with no guarantee it is the day the release was cut;
-     * the association with the Git tags replaces every one of them with the moment of the commit the
-     * release was built from, and numbers the versions that have a tag again.
+     * The dates are final, the numbering is provisional. Jira dates a version to the day it was
+     * published, and that day is the release date the rest of the application orders the versions by;
+     * the association with the Git tags only dates the versions Jira left undated, drops the ones
+     * having no tag, and numbers the survivors again.
      *
      * @param dtos the list of JiraVersionDTO objects to be converted
      * @return a list of Version objects derived from the input DTOs
@@ -60,21 +60,37 @@ public class JiraVersionsRetrieverImpl implements VersionsRetriever {
         log.debug("Converting {} DTOs to Version objects...", dtos.size());
         List<Version> versions = new ArrayList<>();
         for (JiraVersionDTO dto : dtos) {
-            if (dto.getId() == null || dto.getName() == null) {
-                log.warn("Version {} has no id or name. Skipping...", dto);
-                continue;
-            }
-            Version version = new Version(dto.getId(), dto.getName(), dto.isReleased(), dto.isOverdue());
+            if (!isVersionUsable(dto)) continue;
+            Version version = new Version(dto.getId(), dto.getName(), true, dto.isOverdue());
             if (dto.getReleaseDate() == null)
                 log.warn("Version {} (id: {}) has no release date. It will be set later during commit association.", dto.getName(), dto.getId());
             else version.setReleaseDate(dto.getReleaseDate().atStartOfDay());
             versions.add(version);
         }
         log.info("Successfully retrieved {} versions out of {} total versions from Jira", versions.size(), dtos.size());
-        // Order the releases from the oldest to the newest and number them from 1. Both the dates this
-        // reads and the indices it assigns are replaced once the Git tags say when each release was cut
+        // Order the releases from the oldest to the newest and number them from 1. The indices are
+        // assigned again once the versions having no Git tag have been dropped
         Version.numberVersions(versions);
         return versions;
     }
 
+    /**
+     * Checks if the given Jira version is usable based on its properties.
+     * A version is considered usable if it has both a non-null id and name,
+     * and is marked as released.
+     *
+     * @param dto the JiraVersionDTO object representing the version to check
+     * @return true if the version is usable, false otherwise
+     */
+    private boolean isVersionUsable(JiraVersionDTO dto) {
+        if (dto.getId() == null || dto.getName() == null) {
+            log.warn("Version {} has no id or name. Skipping...", dto);
+            return false;
+        }
+        if (!dto.isReleased()) {
+            log.info("Version {} has not been released. Skipping...", dto.getName());
+            return false;
+        }
+        return true;
+    }
 }
