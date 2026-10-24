@@ -25,6 +25,9 @@ import java.util.List;
  * {@link SimpleProportion} method instead.</li>
  * <li>Only the defects whose injected version was reported and is consistent contribute to the average,
  * so that estimated values never feed back into later estimates.</li>
+ * <li>Of those, only the post-release defects do, i.e. the ones {@link DefectLifeCycle#isPostRelease()}
+ * accepts: a defect injected and fixed in the same version never reached a release, and would add a
+ * proportion of 0 to an average describing how long the defects that did reach one stayed hidden.</li>
  * </ul>
  */
 @Slf4j
@@ -43,12 +46,17 @@ public class IncrementalProportion extends AbstractProportion {
         // For every version R, accumulate the proportions of the defects fixed exactly in R...
         double[] proportionSum = new double[lastIndex + 1];
         int[] defectCount = new int[lastIndex + 1];
+        int excluded = 0;
         for (DefectLifeCycle lifeCycle : lifeCycles) {
-            if (lifeCycle.hasInjectedVersion()) {
+            if (lifeCycle.isPostRelease()) {
                 proportionSum[lifeCycle.fv()] += lifeCycle.proportion();
                 defectCount[lifeCycle.fv()]++;
+            } else if (lifeCycle.hasInjectedVersion()) {
+                excluded++;
             }
         }
+        log.info("{} defects reporting their injected version never reached a release or report a fix "
+                + "version older than their opening version: left out of the average proportion", excluded);
         // ...then turn the totals into running ones, so that entry R covers every defect fixed in 1 to R
         for (int index = FIRST_VERSION_INDEX; index <= lastIndex; index++) {
             proportionSum[index] += proportionSum[index - 1];
