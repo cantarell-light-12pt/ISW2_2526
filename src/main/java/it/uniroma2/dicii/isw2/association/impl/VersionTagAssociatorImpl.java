@@ -21,12 +21,17 @@ public class VersionTagAssociatorImpl implements VersionTagAssociator {
     /**
      * {@inheritDoc}
      * <p>
-     * The release date a version comes out of Jira with is overwritten with the one its tag reports,
-     * rather than merely completed when Jira left it blank. Jira records the day somebody marked the
-     * version released, which is neither the moment the release was cut nor even reliably ordered with
-     * respect to the other releases; the tag points at the very commit the release was built from. The
-     * date is what the ordinal index of a version is assigned from, so the two sources cannot be
-     * mixed: a history half dated by Jira and half by Git orders neither half against the other.
+     * The release date a version comes out of Jira with is kept, and the one its tag reports only
+     * completes it when Jira left it blank. The date of a tag is the date of the commit it points at,
+     * which is not always the commit the release was built from: the eleven releases ZooKeeper cut
+     * before leaving Subversion, 3.0.0 to 3.3.2, are tagged on the commits that moved them when the
+     * project became a top-level one, all dated 2010-11-24T21:19:37. Read from the tags, two years of
+     * releases would come out published in the same second, and every defect reported in those two
+     * years would be opened against 3.0.0. Jira dates each of them on the day it was published.
+     * <p>
+     * The tag is still what a version Jira left undated falls back on, rather than leaving it undated:
+     * an undated version sorts after every dated one, and ZooKeeper's 3.6.0, released and tagged, is
+     * the one version Jira reports no date for.
      */
     @Override
     public void associateTagsToVersions(List<Tag> tags, List<Version> versions) {
@@ -41,9 +46,12 @@ public class VersionTagAssociatorImpl implements VersionTagAssociator {
                 winner = candidates.getFirst();
                 version.setCommitId(winner.commitId());
                 log.debug("Associated tag {} to version {}", candidates.getFirst().label(), version.getName());
-                LocalDateTime releaseDate = releaseDateOf(winner);
-                version.setReleaseDate(releaseDate);
-                log.debug("Set release date for version {} to {}", version.getName(), releaseDate);
+                if (version.getReleaseDate() == null) {
+                    LocalDateTime releaseDate = releaseDateOf(winner);
+                    version.setReleaseDate(releaseDate);
+                    log.warn("Version {} has no release date in Jira: dated {} after its tag",
+                            version.getName(), releaseDate);
+                }
                 counter++;
             } else {
                 String tagLabels = candidates.stream().map(Tag::label).collect(java.util.stream.Collectors.joining(", "));
@@ -56,7 +64,7 @@ public class VersionTagAssociatorImpl implements VersionTagAssociator {
 
     /**
      * Reads out of a tag the moment the version it marks was released, as the commit the tag points at
-     * reports it.
+     * reports it. Only read for a version Jira reports no release date for.
      * <p>
      * The instant is normalised to UTC, and not merely stripped of its zone: the committers of a
      * project the size of this one are spread across the world, and ZooKeeper's release tags carry

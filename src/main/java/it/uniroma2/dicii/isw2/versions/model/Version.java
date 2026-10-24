@@ -14,9 +14,9 @@ public class Version implements Comparable<Version> {
     /**
      * Orders the releases of the project from the oldest to the newest, by the moment they were
      * released rather than by the number they were given. The name breaks a tie, and a version whose
-     * release date is unknown sorts last: a list where no date is known at all — as is the case when
-     * the versions have just been read from Jira, before the tags say when they were really cut —
-     * therefore degrades to the name ordering {@link #compareTo(Version)} defines.
+     * release date is unknown sorts last — as a version Jira reports no date for does, until its Git
+     * tag dates it — so that a list where no date is known at all degrades to the name ordering
+     * {@link #compareTo(Version)} defines.
      */
     private static final Comparator<Version> BY_RELEASE_DATE =
             Comparator.comparing(Version::getReleaseDate, Comparator.nullsLast(Comparator.naturalOrder()))
@@ -27,10 +27,9 @@ public class Version implements Comparable<Version> {
     private final String name;
 
     /**
-     * The moment this version was released, as the commit its Git tag points at reports it, normalised
-     * to UTC. The whole timestamp is kept, and not just the day: releases of two lines maintained in
-     * parallel are published hours apart often enough — ZooKeeper cut 3.4.0 fifteen hours before
-     * 3.3.4, and 3.9.2 eighty minutes before 3.8.4 — that a day would order them by name instead.
+     * The day this version was released, as Jira reports it, at the start of that day. Jira dates a
+     * version to the day only, so releases published on the same day are ordered by name. A version
+     * Jira reports no date for is dated by the commit its Git tag points at instead, normalised to UTC.
      */
     private LocalDateTime releaseDate;
 
