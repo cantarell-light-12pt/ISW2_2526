@@ -41,6 +41,23 @@ public record DefectLifeCycle(Issue issue, Version openingVersion, Version fixed
     }
 
     /**
+     * Tells whether this defect is one the proportion can be learnt from: its injected version is known,
+     * it was present in at least one release ({@code IV < FV}), and it was not fixed in a release
+     * published before it was reported ({@code OV <= FV}).
+     * <p>
+     * A defect injected and fixed in the same version was introduced and repaired while that version
+     * was being developed, and never reached a release: its proportion is 0, and averaging it in pulls
+     * the estimate of every defect that did reach one towards its fixed version. A fix version older
+     * than the opening version is an error of the report, and {@link #versionsToFix()} clamping the
+     * negative difference to one turns its proportion into a meaningless {@code FV - IV}.
+     *
+     * @return whether this defect is a post-release defect with a consistent life cycle
+     */
+    public boolean isPostRelease() {
+        return hasInjectedVersion() && iv() < fv() && ov() <= fv();
+    }
+
+    /**
      * @return the index of the injected version (IV)
      * @throws NullPointerException if the injected version is not known
      */
@@ -64,8 +81,8 @@ public record DefectLifeCycle(Issue issue, Version openingVersion, Version fixed
 
     /**
      * Computes the proportion {@code P = (FV - IV) / (FV - OV)} of this defect, i.e. the share of the
-     * defect life cycle spent before the failure was observed. Only meaningful for defects whose
-     * injected version is known, as those are the ones the estimation learns from.
+     * defect life cycle spent before the failure was observed. Only meaningful for the defects
+     * {@link #isPostRelease()} accepts, as those are the ones the estimation learns from.
      *
      * @return the proportion of this defect
      * @throws NullPointerException if the injected version is not known

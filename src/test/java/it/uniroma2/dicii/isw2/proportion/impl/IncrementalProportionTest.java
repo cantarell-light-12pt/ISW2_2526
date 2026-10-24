@@ -123,6 +123,77 @@ public class IncrementalProportionTest {
         Assert.assertEquals("13.0", target.getInjected().getName());
     }
 
+    /**
+     * Builds {@code count} defects injected, reported and fixed in version 9, i.e. defects introduced
+     * and repaired while version 9 was being developed, which never reached a release. Their
+     * proportion is 0.
+     */
+    private List<Issue> neverReleasedDefects(int count) {
+        List<Issue> defects = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            defects.add(defect("PROJ-UNRELEASED-" + i, versions, 9, 9, 9));
+        }
+        return defects;
+    }
+
+    @Test
+    public void doesNotLearnFromTheDefectsThatNeverReachedARelease() throws ProportionException {
+        Issue target = defect(TARGET, versions, 14, 16, null);
+        int count = 5;
+        List<Issue> issues = knownDefects(count);
+        // Averaged in, their proportions of 0 would drop the average from 1.8 to 0.9, and the target
+        // would be estimated as version 15 instead of 13
+        issues.addAll(neverReleasedDefects(count));
+        issues.add(target);
+
+        strategy.applyProportion(issues, versions);
+
+        Assert.assertEquals("13.0", target.getInjected().getName());
+    }
+
+    @Test
+    public void doesNotLearnFromTheDefectsFixedInAVersionOlderThanTheirOpeningVersion() throws ProportionException {
+        Issue target = defect(TARGET, versions, 14, 16, null);
+        List<Issue> issues = knownDefects(5);
+        // Fixed in version 9 although reported towards version 10: FV - OV is clamped to 1, so each
+        // would weigh in as FV - IV = 3, lifting the average to 2.4 and the target to version 12
+        for (int i = 0; i < 5; i++) {
+            issues.add(defect("PROJ-INCONSISTENT-" + i, versions, 10, 9, 6));
+        }
+        issues.add(target);
+
+        strategy.applyProportion(issues, versions);
+
+        Assert.assertEquals("13.0", target.getInjected().getName());
+    }
+
+    @Test
+    public void doesNotCountTheDefectsThatNeverReachedAReleaseTowardsTheMinimum() throws ProportionException {
+        Issue target = defect(TARGET, versions, 14, 16, null);
+        List<Issue> issues = knownDefects(IncrementalProportion.MIN_DEFECTS_TO_ESTIMATE - 1);
+        issues.addAll(neverReleasedDefects(5));
+        issues.add(target);
+
+        strategy.applyProportion(issues, versions);
+
+        Assert.assertEquals("Too little history must degrade to IV = OV", "14.0", target.getInjected().getName());
+    }
+
+    @Test
+    public void stillLabelsTheDefectsLeftOutOfTheAverage() throws ProportionException {
+        Issue unreleased = defect("PROJ-UNRELEASED", versions, 9, 9, 9);
+        Issue inconsistent = defect("PROJ-INCONSISTENT", versions, 10, 9, 6);
+        List<Issue> issues = new ArrayList<>(List.of(unreleased, inconsistent));
+
+        strategy.applyProportion(issues, versions);
+
+        Assert.assertEquals("9.0", unreleased.getInjected().getName());
+        Assert.assertTrue("A defect that never reached a release affects none",
+                unreleased.getAffectedVersions().isEmpty());
+        Assert.assertEquals(List.of("6.0", "7.0", "8.0"),
+                inconsistent.getAffectedVersions().stream().map(Version::getName).toList());
+    }
+
     @Test
     public void neverEstimatesAnInjectedVersionNewerThanTheOpeningVersion() throws ProportionException {
         // Defects fixed in the very version they were opened towards have a proportion of 1, so the raw
