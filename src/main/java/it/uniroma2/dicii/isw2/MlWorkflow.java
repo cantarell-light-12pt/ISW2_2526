@@ -12,6 +12,7 @@ import it.uniroma2.dicii.isw2.ml.impl.CsvEvaluationReportWriter;
 import it.uniroma2.dicii.isw2.ml.impl.HoldOutTester;
 import it.uniroma2.dicii.isw2.ml.impl.ReleaseDatasetSplitter;
 import it.uniroma2.dicii.isw2.ml.impl.WekaClassifierFactory;
+import it.uniroma2.dicii.isw2.ml.model.BalancingKind;
 import it.uniroma2.dicii.isw2.ml.model.ClassifierKind;
 import it.uniroma2.dicii.isw2.ml.model.DatasetSplit;
 import it.uniroma2.dicii.isw2.ml.model.EvaluationOutcome;
@@ -54,9 +55,15 @@ import java.util.Locale;
  * between the two is itself the finding — it is how much of the validation score was the model
  * recognising classes rather than recognising faults.
  * <p>
- * Nothing here names a classifier or a Weka class. Which models are measured is the configured list the
- * loop below runs over, and the rows arrive as {@code Instances}, so measuring three models instead of
- * one is an edit to the properties file, and measuring them on a dataset a feature selection has
+ * Every model is measured once per configured balancing technique, both phases each time. The technique
+ * is applied to the rows a model is <i>trained</i> on and to no others — the training part of each fold,
+ * then the whole training half — so the held-out tenth of a fold and the test releases are always the
+ * rows as they are, and the figures of two techniques are estimates of the same population.
+ * <p>
+ * Nothing here names a classifier, a balancing technique or a Weka class. Which models are measured, and
+ * how their training rows are balanced, are the configured lists the loop below runs over, and the rows
+ * arrive as {@code Instances}, so measuring three models under three techniques instead of one is an
+ * edit to the properties file, and measuring them on a dataset a feature selection has
  * reduced is a different {@code Instances} handed to the same evaluator.
  */
 @Slf4j
@@ -70,7 +77,7 @@ public class MlWorkflow {
      * than as the number it is, so that a cell no model could fill can be left blank instead of reading
      * {@code NaN}.
      */
-    private static final String ROW_FORMAT = "%-14s %-11s %9s %9s %9s %9s %9s %9s%n";
+    private static final String ROW_FORMAT = "%-14s %-14s %-11s %9s %9s %9s %9s %9s %9s%n";
 
     private final String projectName;
     private final Path datasetDirectory;
@@ -109,15 +116,16 @@ public class MlWorkflow {
     }
 
     /**
-     * Validates and then tests every configured model, writing each row as it comes.
+     * Validates and then tests every configured model under every configured balancing technique,
+     * writing each row as it comes.
      * <p>
      * A model that fails costs its own rows and no more: the ones already measured are worth reading
      * with a row missing from the table.
      *
      * @param split    the training rows and the held-out test rows
-     * @param settings which models to measure
+     * @param settings which models to measure, and how to balance their training rows
      * @param report   where the scores are written
-     * @return how each of them scored in each phase, validation first
+     * @return how each of them scored under each technique in each phase, validation first
      * @throws MlException if a score cannot be written
      */
     private static List<EvaluationOutcome> measure(DatasetSplit split, MlSettings settings,
@@ -126,48 +134,55 @@ public class MlWorkflow {
         ModelEvaluator evaluator = new CrossValidatingEvaluator(factory, settings);
         ModelTester tester = new HoldOutTester(factory, settings);
         List<ClassifierKind> classifiers = settings.classifiers();
-        log.info("Measuring {} models, each validated over {} folds of the training releases and then "
-                + "tested on the held-out ones", classifiers.size(), settings.folds());
-        List<EvaluationOutcome> outcomes = new ArrayList<>(classifiers.size() * 2);
+        List<BalancingKind> techniques = settings.balancingTechniques();
+        log.info("Measuring {} models under {} balancing techniques, each validated over {} folds of the "
+                        + "training releases and then tested on the held-out ones", classifiers.size(),
+                techniques.size(), settings.folds());
+        List<EvaluationOutcome> outcomes = new ArrayList<>(classifiers.size() * techniques.size() * 2);
         for (ClassifierKind classifier : classifiers) {
-            for (EvaluationOutcome outcome : measureOne(split, evaluator, tester, classifier)) {
-                report.write(outcome);
-                outcomes.add(outcome);
+            for (BalancingKind balancing : techniques) {
+                for (EvaluationOutcome outcome : measureOne(split, evaluator, tester, classifier,
+                        balancing)) {
+                    report.write(outcome);
+                    outcomes.add(outcome);
+                }
             }
         }
         return outcomes;
     }
 
     /**
-     * Runs both phases of one model.
+     * Runs both phases of one model under one balancing technique.
      *
      * @param split      the training rows and the held-out test rows
      * @param evaluator  what cross-validates it over the training rows
      * @param tester     what trains it and asks it about the test rows
      * @param classifier which model to measure
+     * @param balancing  how to balance the rows it is trained on
      * @return what it scored in each phase, or fewer rows if a phase failed
      */
     private static List<EvaluationOutcome> measureOne(DatasetSplit split, ModelEvaluator evaluator,
-                                                      ModelTester tester, ClassifierKind classifier) {
+                                                      ModelTester tester, ClassifierKind classifier,
+                                                      BalancingKind balancing) {
         List<EvaluationOutcome> outcomes = new ArrayList<>(2);
         try {
-            outcomes.add(evaluator.evaluate(split.training(), classifier));
+            outcomes.add(evaluator.evaluate(split.training(), classifier, balancing));
         } catch (MlException e) {
-            log.error("Unable to validate {}. Leaving it out of the comparison...",
-                    classifier.getLabel(), e);
+            log.error("Unable to validate {} balanced by {}. Leaving it out of the comparison...",
+                    classifier.getLabel(), balancing.getLabel(), e);
         }
         try {
-            outcomes.add(tester.test(split.training(), split.test(), classifier));
+            outcomes.add(tester.test(split.training(), split.test(), classifier, balancing));
         } catch (MlException e) {
-            log.error("Unable to test {} on the held-out releases. Leaving it out of the comparison...",
-                    classifier.getLabel(), e);
+            log.error("Unable to test {} balanced by {} on the held-out releases. Leaving it out of the "
+                    + "comparison...", classifier.getLabel(), balancing.getLabel(), e);
         }
         return outcomes;
     }
 
     /**
-     * Logs the comparison as a table, two rows per model: what it scored validating over the training
-     * releases, and what it scored on the releases it had never seen.
+     * Logs the comparison as a table, two rows per model and balancing technique: what it scored
+     * validating over the training releases, and what it scored on the releases it had never seen.
      * <p>
      * The four figures beside accuracy and kappa are of the buggy class alone, and are worth a glance
      * before accuracy is believed: some 23% of the rows are buggy, so a model finding none of them still
@@ -183,13 +198,13 @@ public class MlWorkflow {
         StringBuilder table = new StringBuilder(String.format(Locale.ROOT,
                 "How each model predicts the buggy classes, validated over %d folds of the training "
                         + "releases and tested on the held-out ones:%n", folds));
-        table.append(String.format(Locale.ROOT, ROW_FORMAT, "Classifier", "Phase", "Accuracy",
-                "Precision", "Recall", "F1", "AUC", "Kappa"));
+        table.append(String.format(Locale.ROOT, ROW_FORMAT, "Classifier", "Balancing", "Phase",
+                "Accuracy", "Precision", "Recall", "F1", "AUC", "Kappa"));
         for (EvaluationOutcome outcome : outcomes) {
             table.append(String.format(Locale.ROOT, ROW_FORMAT, outcome.classifier().getLabel(),
-                    outcome.phase().getLabel(), score(outcome.accuracy()), score(outcome.precision()),
-                    score(outcome.recall()), score(outcome.fMeasure()), score(outcome.areaUnderRoc()),
-                    score(outcome.kappa())));
+                    outcome.balancing().getLabel(), outcome.phase().getLabel(),
+                    score(outcome.accuracy()), score(outcome.precision()), score(outcome.recall()),
+                    score(outcome.fMeasure()), score(outcome.areaUnderRoc()), score(outcome.kappa())));
         }
         log.info(table.toString());
     }

@@ -1,6 +1,7 @@
 package it.uniroma2.dicii.isw2.ml.impl;
 
 import it.uniroma2.dicii.isw2.ml.MlSettings;
+import it.uniroma2.dicii.isw2.ml.model.BalancingKind;
 import it.uniroma2.dicii.isw2.ml.model.ClassifierKind;
 import weka.core.Attribute;
 import weka.core.DenseInstance;
@@ -55,7 +56,19 @@ final class SyntheticInstances {
      * @return them, labelled, with the signal attribute separating the two classes cleanly
      */
     static Instances separable(int rows) {
-        return build(rows, rows / 2, true);
+        return separable(rows, rows / 2);
+    }
+
+    /**
+     * Builds rows a balancer has something to do on and a model can still learn: as lopsided as the
+     * real dataset, with the signal attribute separating the two classes cleanly all the same.
+     *
+     * @param rows      how many rows to build
+     * @param buggyRows how many of them are buggy, which should be the smaller share
+     * @return them, labelled
+     */
+    static Instances separable(int rows, int buggyRows) {
+        return build(rows, buggyRows, true);
     }
 
     /**
@@ -199,10 +212,21 @@ final class SyntheticInstances {
     /**
      * @param classifier    the model to measure
      * @param positiveClass the class the per-class figures are read of
-     * @return settings a test can run under
+     * @return settings a test can run under, leaving the rows unbalanced — which is the shape the tests
+     * of everything but the balancers want, since a resampled set is no longer the one they built
      */
     static MlSettings settings(ClassifierKind classifier, String positiveClass) {
-        return new MlSettings(List.of(classifier), 0.67, 2, 1, positiveClass, 1, 10, 1);
+        return settings(classifier, positiveClass, BalancingKind.NONE);
+    }
+
+    /**
+     * @param classifier    the model to measure
+     * @param positiveClass the class the per-class figures are read of
+     * @param balancing     how the training rows are brought to the same size
+     * @return settings a test can run under
+     */
+    static MlSettings settings(ClassifierKind classifier, String positiveClass, BalancingKind balancing) {
+        return new MlSettings(List.of(classifier), List.of(balancing), 0.67, 2, 1, positiveClass, 1, 10, 1);
     }
 
 }

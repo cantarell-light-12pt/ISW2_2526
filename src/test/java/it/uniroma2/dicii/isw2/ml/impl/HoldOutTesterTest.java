@@ -3,6 +3,7 @@ package it.uniroma2.dicii.isw2.ml.impl;
 import it.uniroma2.dicii.isw2.ml.MlSettings;
 import it.uniroma2.dicii.isw2.ml.ModelTester;
 import it.uniroma2.dicii.isw2.ml.exception.MlException;
+import it.uniroma2.dicii.isw2.ml.model.BalancingKind;
 import it.uniroma2.dicii.isw2.ml.model.ClassifierKind;
 import it.uniroma2.dicii.isw2.ml.model.EvaluationOutcome;
 import it.uniroma2.dicii.isw2.ml.model.EvaluationPhase;
@@ -40,7 +41,7 @@ public class HoldOutTesterTest {
     @Test
     public void testAModelTrainedOnOneSetPredictsTheOther() throws MlException {
         EvaluationOutcome outcome = tester.test(SyntheticInstances.separable(TRAINING_ROWS),
-                SyntheticInstances.separable(TEST_ROWS), ClassifierKind.NAIVE_BAYES);
+                SyntheticInstances.separable(TEST_ROWS), ClassifierKind.NAIVE_BAYES, BalancingKind.NONE);
 
         assertTrue("The buggy class went unfound in the held-out rows", outcome.areaUnderRoc() > 0.9);
         assertTrue(outcome.accuracy() > 0.9);
@@ -57,7 +58,7 @@ public class HoldOutTesterTest {
     @Test
     public void testTheOutcomeIsMarkedAsTheTestPhaseAndCutsNoFolds() throws MlException {
         EvaluationOutcome outcome = tester.test(SyntheticInstances.separable(TRAINING_ROWS),
-                SyntheticInstances.separable(TEST_ROWS), ClassifierKind.NAIVE_BAYES);
+                SyntheticInstances.separable(TEST_ROWS), ClassifierKind.NAIVE_BAYES, BalancingKind.NONE);
         assertEquals(EvaluationPhase.TEST, outcome.phase());
         assertEquals(0, outcome.folds());
         assertEquals(ClassifierKind.NAIVE_BAYES, outcome.classifier());
@@ -75,7 +76,7 @@ public class HoldOutTesterTest {
                 SyntheticInstances.settings(ClassifierKind.IBK, SyntheticInstances.BUGGY);
         EvaluationOutcome outcome =
                 new HoldOutTester(new WekaClassifierFactory(singleNeighbour), singleNeighbour)
-                        .test(training, unlearnable, ClassifierKind.IBK);
+                        .test(training, unlearnable, ClassifierKind.IBK, BalancingKind.NONE);
 
         assertNotEquals("The model was measured on the rows it was trained on", 1.0,
                 outcome.accuracy(), 1e-9);
@@ -92,14 +93,46 @@ public class HoldOutTesterTest {
         Instances different = SyntheticInstances.separable(TEST_ROWS);
         different.deleteAttributeAt(0);
         assertThrows(MlException.class,
-                () -> tester.test(training, different, ClassifierKind.NAIVE_BAYES));
+                () -> tester.test(training, different, ClassifierKind.NAIVE_BAYES, BalancingKind.NONE));
+    }
+
+    /**
+     * The training rows are balanced and the test rows are not, so the technique changes how the model
+     * was taught and never what it is measured on: whatever it was, a model has to find what the rows
+     * give away, and the outcome has to say which technique it was trained under.
+     */
+    @Test
+    public void testEveryBalancingTechniqueCanBeTested() throws MlException {
+        for (BalancingKind balancing : BalancingKind.values()) {
+            EvaluationOutcome outcome = tester.test(
+                    SyntheticInstances.separable(TRAINING_ROWS, TRAINING_ROWS / 5),
+                    SyntheticInstances.separable(TEST_ROWS), ClassifierKind.NAIVE_BAYES, balancing);
+            assertEquals(balancing, outcome.balancing());
+            assertTrue("The separable rows defeated a model balanced by " + balancing.getLabel(),
+                    outcome.accuracy() > 0.9);
+        }
+    }
+
+    /**
+     * The same held-out measurement chooses a balancing technique over the later training releases, and
+     * the report has to be able to tell that apart from the test the project is reported on.
+     */
+    @Test
+    public void testTheOutcomeIsMarkedAsThePhaseItWasBuiltFor() throws MlException {
+        MlSettings settings = SyntheticInstances.settings();
+        ModelTester selecting = new HoldOutTester(new WekaClassifierFactory(settings), settings,
+                EvaluationPhase.SELECTION);
+        EvaluationOutcome outcome = selecting.test(SyntheticInstances.separable(TRAINING_ROWS),
+                SyntheticInstances.separable(TEST_ROWS), ClassifierKind.NAIVE_BAYES, BalancingKind.NONE);
+        assertEquals(EvaluationPhase.SELECTION, outcome.phase());
+        assertEquals(0, outcome.folds());
     }
 
     @Test
     public void testEveryConfiguredModelCanBeTested() throws MlException {
         for (ClassifierKind kind : ClassifierKind.values()) {
             EvaluationOutcome outcome = tester.test(SyntheticInstances.separable(TRAINING_ROWS),
-                    SyntheticInstances.separable(TEST_ROWS), kind);
+                    SyntheticInstances.separable(TEST_ROWS), kind, BalancingKind.NONE);
             assertEquals(kind, outcome.classifier());
             assertTrue("The separable rows defeated " + kind.getLabel(), outcome.accuracy() > 0.9);
         }

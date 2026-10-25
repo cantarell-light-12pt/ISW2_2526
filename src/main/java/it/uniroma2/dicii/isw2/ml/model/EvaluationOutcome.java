@@ -13,6 +13,7 @@ import java.time.Duration;
  * that accuracy is more than guessing at the observed rates would reach.
  *
  * @param classifier   which model was measured
+ * @param balancing    how the rows it was trained on were balanced
  * @param phase        on which occasion, i.e. against which rows
  * @param folds        how many folds it was cross-validated over, or zero for the inference phase,
  *                     which cuts none — it trains once and predicts the releases it was held back from
@@ -25,7 +26,8 @@ import java.time.Duration;
  *                     would reach
  * @param elapsed      how long the phase took
  */
-public record EvaluationOutcome(ClassifierKind classifier, EvaluationPhase phase, int folds,
+public record EvaluationOutcome(ClassifierKind classifier, BalancingKind balancing,
+                                EvaluationPhase phase, int folds,
                                 double accuracy, double precision, double recall, double fMeasure,
                                 double areaUnderRoc, double kappa, Duration elapsed) {
 }

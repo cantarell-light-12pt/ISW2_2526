@@ -1,6 +1,7 @@
 package it.uniroma2.dicii.isw2.ml;
 
 import it.uniroma2.dicii.isw2.ml.exception.MlException;
+import it.uniroma2.dicii.isw2.ml.model.BalancingKind;
 import it.uniroma2.dicii.isw2.ml.model.ClassifierKind;
 import org.junit.Test;
 
@@ -24,6 +25,16 @@ public class MlSettingsTest {
      * A share leaving releases on both sides of the cut, which is all these tests need of it.
      */
     private static final double FRACTION = 0.67;
+
+    /**
+     * One model, since what is under test here is the settings and not the comparison.
+     */
+    private static final List<ClassifierKind> MODELS = List.of(ClassifierKind.IBK);
+
+    /**
+     * The rows as they are, which is what every case but the ones asserting on it wants.
+     */
+    private static final List<BalancingKind> BALANCING = List.of(BalancingKind.NONE);
 
     /**
      * The validation the project is required to report on is a ten-fold one, so the number is asserted
@@ -69,7 +80,72 @@ public class MlSettingsTest {
     @Test
     public void testAValidationOfFewerThanTwoFoldsIsRefused() {
         assertThrows(IllegalArgumentException.class,
-                () -> new MlSettings(List.of(ClassifierKind.IBK), FRACTION, 1, 1, BUGGY, 1, 100, 3));
+                () -> new MlSettings(MODELS, BALANCING, FRACTION, 1, 1, BUGGY, 1, 100, 3));
+    }
+
+    /**
+     * "The rows were not balanced" is a technique like the other two, and has to be named as one: a
+     * settings object that accepted nothing there would let a run leave the choice unmade and report the
+     * unbalanced figures under whatever heading the reader assumed.
+     */
+    @Test
+    public void testAnUnnamedBalancingTechniqueIsRefused() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new MlSettings(MODELS, null, FRACTION, 10, 1, BUGGY, 1, 100, 3));
+    }
+
+    @Test
+    public void testAnEmptyListOfBalancingTechniquesIsRefused() {
+        List<BalancingKind> none = List.of();
+        assertThrows(IllegalArgumentException.class,
+                () -> new MlSettings(MODELS, none, FRACTION, 10, 1, BUGGY, 1, 100, 3));
+    }
+
+    /**
+     * The comparison the project reports is of the rows as they are against the two techniques, in
+     * that order, so the list is asserted rather than merely read.
+     */
+    @Test
+    public void testTheConfiguredBalancingTechniquesAreReadInOrder() throws MlException {
+        assertEquals(List.of(BalancingKind.NONE, BalancingKind.UNDERSAMPLING, BalancingKind.SMOTE),
+                MlSettings.load().balancingTechniques());
+    }
+
+    /**
+     * The settings hold a copy, so that the list they were built from cannot be written into behind
+     * them and change which techniques a run is measuring halfway through it.
+     */
+    @Test
+    public void testTheBalancingTechniquesCannotBeWrittenIntoBehindTheSettings() {
+        List<BalancingKind> techniques = new ArrayList<>(List.of(BalancingKind.NONE));
+        MlSettings settings = new MlSettings(MODELS, techniques, FRACTION, 10, 1, BUGGY, 1, 100, 3);
+        techniques.add(BalancingKind.SMOTE);
+        assertEquals(List.of(BalancingKind.NONE), settings.balancingTechniques());
+    }
+
+    /**
+     * The balancing study cuts the training releases again, at a share of its own, and nothing else
+     * about the run may change with it: the techniques compared have to be the ones the run measures.
+     */
+    @Test
+    public void testOnlyTheTrainingFractionChangesWhenTheCutIsMoved() {
+        MlSettings settings = settings(List.of(ClassifierKind.IBK, ClassifierKind.NAIVE_BAYES));
+        MlSettings moved = settings.withTrainingFraction(0.5);
+        assertEquals(0.5, moved.trainingFraction(), 0.0);
+        assertEquals(new MlSettings(settings.classifiers(), settings.balancingTechniques(), 0.5,
+                settings.folds(), settings.seed(), settings.positiveClass(), settings.threads(),
+                settings.randomForestIterations(), settings.ibkNeighbours()), moved);
+    }
+
+    @Test
+    public void testAMovedCutStillLeavesReleasesOnBothSides() {
+        MlSettings settings = settings(MODELS);
+        assertThrows(IllegalArgumentException.class, () -> settings.withTrainingFraction(1.0));
+    }
+
+    @Test
+    public void testTheBalancingStudyCutsTheTrainingReleasesAtTwoThirds() {
+        assertEquals(0.66, MlSettings.balancingStudyTrainingFraction(), 0.0);
     }
 
     @Test
@@ -87,7 +163,7 @@ public class MlSettingsTest {
         for (double fraction : new double[] {0.0, 1.0, -0.1, 1.5, Double.NaN}) {
             assertThrows("A training fraction of " + fraction + " was accepted",
                     IllegalArgumentException.class,
-                    () -> new MlSettings(List.of(ClassifierKind.IBK), fraction, 10, 1, BUGGY, 1, 100, 3));
+                    () -> new MlSettings(MODELS, BALANCING, fraction, 10, 1, BUGGY, 1, 100, 3));
         }
     }
 
@@ -101,17 +177,17 @@ public class MlSettingsTest {
     @Test
     public void testAnUnnamedBuggyClassIsRefused() {
         assertThrows(IllegalArgumentException.class,
-                () -> new MlSettings(List.of(ClassifierKind.IBK), FRACTION, 10, 1, " ", 1, 100, 3));
+                () -> new MlSettings(MODELS, BALANCING, FRACTION, 10, 1, " ", 1, 100, 3));
     }
 
     @Test
     public void testAModelBuiltOutOfNothingIsRefused() {
         assertThrows(IllegalArgumentException.class,
-                () -> new MlSettings(List.of(ClassifierKind.IBK), FRACTION, 10, 1, BUGGY, 1, 0, 3));
+                () -> new MlSettings(MODELS, BALANCING, FRACTION, 10, 1, BUGGY, 1, 0, 3));
         assertThrows(IllegalArgumentException.class,
-                () -> new MlSettings(List.of(ClassifierKind.IBK), FRACTION, 10, 1, BUGGY, 1, 100, 0));
+                () -> new MlSettings(MODELS, BALANCING, FRACTION, 10, 1, BUGGY, 1, 100, 0));
         assertThrows(IllegalArgumentException.class,
-                () -> new MlSettings(List.of(ClassifierKind.IBK), FRACTION, 10, 1, BUGGY, 0, 100, 3));
+                () -> new MlSettings(MODELS, BALANCING, FRACTION, 10, 1, BUGGY, 0, 100, 3));
     }
 
     /**
@@ -137,7 +213,7 @@ public class MlSettingsTest {
      * @return settings holding them, everything else left at something workable
      */
     private static MlSettings settings(List<ClassifierKind> classifiers) {
-        return new MlSettings(classifiers, FRACTION, 10, 1, BUGGY, 1, 100, 3);
+        return new MlSettings(classifiers, BALANCING, FRACTION, 10, 1, BUGGY, 1, 100, 3);
     }
 
 }

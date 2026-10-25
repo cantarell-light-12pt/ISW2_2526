@@ -1,6 +1,7 @@
 package it.uniroma2.dicii.isw2.ml;
 
 import it.uniroma2.dicii.isw2.ml.exception.MlException;
+import it.uniroma2.dicii.isw2.ml.model.BalancingKind;
 import it.uniroma2.dicii.isw2.ml.model.ClassifierKind;
 import it.uniroma2.dicii.isw2.ml.model.EvaluationOutcome;
 import weka.core.Instances;
@@ -22,11 +23,12 @@ public interface ModelTester {
      * @param training   the rows to train on
      * @param test       the rows to predict, held back from everything until now
      * @param classifier which model to train
+     * @param balancing  how to balance the training rows. The test rows are never balanced
      * @return how it scored on the test rows
      * @throws MlException if the model cannot be trained, or the two sets do not describe the same
      *                     columns
      */
-    EvaluationOutcome test(Instances training, Instances test, ClassifierKind classifier)
-            throws MlException;
+    EvaluationOutcome test(Instances training, Instances test, ClassifierKind classifier,
+                           BalancingKind balancing) throws MlException;
 
 }
