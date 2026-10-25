@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -35,10 +36,23 @@ import java.util.Set;
  * everything about cognitive complexity in {@code CognitiveComplexityCalculator}. What is carried from
  * one release to the next is left to {@link ClassHistories}, which knows nothing about Git in turn.
  * <p>
- * The whole history is read in a single pass, at the end of which every release is described. Reading
- * it release by release, on demand, would be enough for the workflow — it measures the versions from
- * the oldest to the newest — but it would make the result of a measurement depend on the measurements
+ * The whole history is read at once, at the end of which every release is described. Reading it
+ * release by release, on demand, would be enough for the workflow — it measures the versions from the
+ * oldest to the newest — but it would make the result of a measurement depend on the measurements
  * taken before it, which is a property a leaf of the composite has no business having.
+ * <p>
+ * The reading takes two passes, because the measures of a class come in two kinds. The first pass
+ * walks the releases in the order they were published, attributing each commit to the earliest of
+ * them that holds it: the churn and the bug fixes since the previous release, the highest churn of a
+ * single release and the age are defined in terms of releases, and that order is the one the release
+ * history is numbered in. It diffs every commit once, and keeps what it read. The second pass replays,
+ * for each release, the commits its own tag can reach out of what the first one kept, and counts the
+ * revisions, the authors, the change in size and the bug fixes of every class over those alone. A
+ * project maintaining several lines at once interleaves their releases in time, so the releases
+ * published before a release are not its history: a maintenance release published after a newer line
+ * was cut would otherwise count every commit of that line, which it does not hold, and the first
+ * release of a line would count every fix of the maintenance branch, backported to it as a commit of
+ * its own, twice.
  */
 @Slf4j
 class ReleaseHistoryAnalyzer {
@@ -86,14 +100,24 @@ class ReleaseHistoryAnalyzer {
         ClassHistories histories = new ClassHistories();
         // The releases already walked, whose commits must not be counted again by the following ones
         List<ObjectId> walked = new ArrayList<>();
+        // What every commit walked changed, by its identifier, which the second pass replays
+        Map<String, CommitChanges> read = new HashMap<>();
+        Map<Integer, ObjectId> released = new HashMap<>();
 
         log.info("Reading the history of the {} released versions under {}...", ordered.size(), repoPath);
         try (Git git = Git.open(repoPath.toFile());
              DiffFormatter formatter = newFormatter(git.getRepository())) {
             Repository repository = git.getRepository();
             for (Version version : ordered) {
-                walkRelease(repository, formatter, version, walked, histories);
+                ObjectId commit = walkRelease(repository, formatter, version, walked, histories, read);
                 history.put(version.getIndex(), histories.freeze(version.getIndex()));
+                if (commit != null) {
+                    released.put(version.getIndex(), commit);
+                }
+            }
+            for (Map.Entry<Integer, ObjectId> release : released.entrySet()) {
+                Map<String, ClassHistory> lineage = lineageOf(repository, release.getKey(), release.getValue(), read);
+                history.put(release.getKey(), withCommitsOf(history.get(release.getKey()), lineage));
             }
         } catch (IOException e) {
             throw new MetricsException("Unable to read the history of the repository at '" + repoPath + "'", e);
@@ -140,16 +164,19 @@ class ReleaseHistoryAnalyzer {
      * @param version    the release to walk
      * @param walked     the commits of the releases already walked, which this call appends to
      * @param histories  the history read so far, updated in place
+     * @param read       what every commit walked so far changed, which this call adds to
+     * @return the commit the release is tagged on, or {@code null} if the repository does not hold it
      */
-    private void walkRelease(Repository repository, DiffFormatter formatter, Version version,
-                             List<ObjectId> walked, ClassHistories histories) {
+    private ObjectId walkRelease(Repository repository, DiffFormatter formatter, Version version,
+                                 List<ObjectId> walked, ClassHistories histories, Map<String, CommitChanges> read) {
         histories.openRelease();
         ObjectId released = releaseCommit(repository, version);
         if (released != null) {
-            walkCommits(repository, formatter, version, released, walked, histories);
+            walkCommits(repository, formatter, version, released, walked, histories, read);
             walked.add(released);
         }
         histories.closeRelease();
+        return released;
     }
 
     /**
@@ -178,7 +205,10 @@ class ReleaseHistoryAnalyzer {
     }
 
     /**
-     * Folds into the histories the commits a release brought in.
+     * Folds into the histories the commits a release brought in, and keeps what each of them changed.
+     * <p>
+     * A merge is left out: what it brings in was already counted on the branch it came from, and
+     * comparing it with its first parent alone would count that work a second time.
      *
      * @param repository the repository being read
      * @param formatter  the formatter the changes are read through
@@ -186,9 +216,10 @@ class ReleaseHistoryAnalyzer {
      * @param released   the commit it is tagged on
      * @param walked     the commits of the releases already walked
      * @param histories  the history read so far, updated in place
+     * @param read       what every commit walked so far changed, which this call adds to
      */
-    private void walkCommits(Repository repository, DiffFormatter formatter, Version version,
-                             ObjectId released, List<ObjectId> walked, ClassHistories histories) {
+    private void walkCommits(Repository repository, DiffFormatter formatter, Version version, ObjectId released,
+                             List<ObjectId> walked, ClassHistories histories, Map<String, CommitChanges> read) {
         int commits = 0;
         try (RevWalk walk = new RevWalk(repository)) {
             walk.markStart(walk.parseCommit(released));
@@ -196,7 +227,11 @@ class ReleaseHistoryAnalyzer {
                 walk.markUninteresting(walk.parseCommit(earlier));
             }
             for (RevCommit commit : walk) {
-                applyCommit(walk, formatter, commit, histories);
+                if (commit.getParentCount() <= 1) {
+                    CommitChanges changes = readCommit(walk, formatter, commit);
+                    read.put(commit.getName(), changes);
+                    fold(changes, histories);
+                }
                 commits++;
             }
         } catch (IOException e) {
@@ -207,60 +242,114 @@ class ReleaseHistoryAnalyzer {
     }
 
     /**
-     * Folds a single commit into the histories of the classes it touched.
-     * <p>
-     * A merge is left out: what it brings in was already counted on the branch it came from, and
-     * comparing it with its first parent alone would count that work a second time.
+     * Reads what a single commit, merges aside, changed in the classes of the dataset.
      *
      * @param walk      the walk the commit was read from, used to read the tree of its parent
      * @param formatter the formatter the changes are read through
-     * @param commit    the commit to fold in
-     * @param histories the history read so far, updated in place
+     * @param commit    the commit to read
+     * @return who wrote it, whether it fixed a bug, and the classes it changed
      * @throws IOException if the trees being compared cannot be read
      */
-    private void applyCommit(RevWalk walk, DiffFormatter formatter, RevCommit commit,
-                             ClassHistories histories) throws IOException {
-        if (commit.getParentCount() > 1) {
-            return;
-        }
+    private CommitChanges readCommit(RevWalk walk, DiffFormatter formatter, RevCommit commit) throws IOException {
         // A root commit has no previous state to be compared with: the empty tree stands in for it
         ObjectId parentTree = commit.getParentCount() == 0
                 ? null
                 : walk.parseCommit(commit.getParent(0)).getTree();
-        boolean bugFix = bugFixCommits.contains(commit.getName());
-        String author = authorOf(commit);
+        List<SourceChange> changes = new ArrayList<>();
         for (DiffEntry entry : formatter.scan(parentTree, commit.getTree())) {
             String path = entry.getNewPath();
-            if (entry.getChangeType() == DiffEntry.ChangeType.DELETE || !filter.accepts(path)) {
-                continue;
+            if (entry.getChangeType() != DiffEntry.ChangeType.DELETE && filter.accepts(path)) {
+                LineDelta delta = linesChanged(formatter, entry);
+                changes.add(new SourceChange(path, movedFrom(entry), delta.added(), delta.deleted()));
             }
-            recordMove(entry, histories);
-            LineDelta delta = linesChanged(formatter, entry);
-            histories.forPath(path).recordCommit(author, delta.added(), delta.deleted(), bugFix);
+        }
+        return new CommitChanges(authorOf(commit), bugFixCommits.contains(commit.getName()), changes);
+    }
+
+    /**
+     * Folds what a commit changed into the histories of the classes it touched, recording first the
+     * moves it made, so that the path a class was at and the one it is at from now on name the one
+     * history.
+     *
+     * @param commit    what the commit changed
+     * @param histories the histories to fold it into, updated in place
+     */
+    private static void fold(CommitChanges commit, ClassHistories histories) {
+        for (SourceChange change : commit.changes()) {
+            if (change.movedFrom() != null) {
+                histories.alias(change.movedFrom(), change.path());
+            }
+            histories.forPath(change.path())
+                    .recordCommit(commit.author(), change.added(), change.deleted(), commit.bugFix());
         }
     }
 
     /**
-     * Records that a change moved a class, so that the path it was at and the one it is at from now on
-     * name the one history.
+     * Tells where a change moved a class from.
      * <p>
      * A copy is not a move: the source it was made from is still there, with a history of its own that
      * the new file has no part in. The class moved <em>from</em> has to be one the dataset holds a row
      * of as well, or a source promoted out of the excluded directories — a test turned into functional
      * code — would graft the history of something that never was a row onto something that is.
      *
-     * @param entry     the change to read
-     * @param histories the history read so far, updated in place
+     * @param entry the change to read
+     * @return the path the class was at before the change, or {@code null} if the change moved no
+     * class of the dataset
      */
-    private void recordMove(DiffEntry entry, ClassHistories histories) {
-        if (entry.getChangeType() != DiffEntry.ChangeType.RENAME) {
-            return;
+    private String movedFrom(DiffEntry entry) {
+        if (entry.getChangeType() != DiffEntry.ChangeType.RENAME || !filter.accepts(entry.getOldPath())) {
+            return null;
         }
-        String previous = entry.getOldPath();
-        if (filter.accepts(previous)) {
-            log.debug("{} is where {} moved to: the two name one class", entry.getNewPath(), previous);
-            histories.alias(previous, entry.getNewPath());
+        log.debug("{} is where {} moved to: the two name one class", entry.getNewPath(), entry.getOldPath());
+        return entry.getOldPath();
+    }
+
+    /**
+     * Counts the revisions, the authors, the change in size and the bug fixes of every class over the
+     * history a release was built from, i.e. over the commits its tag can reach, replaying what the
+     * walk of the releases read rather than diffing those commits again. A commit the walk did not keep
+     * — a merge, which it leaves out — contributes nothing.
+     *
+     * @param repository the repository being read
+     * @param index      the ordinal index of the release
+     * @param released   the commit it is tagged on
+     * @param read       what every commit walked changed
+     * @return the history of each class as the commits of the release tell it, under every path it
+     * has been known by in them
+     */
+    private static Map<String, ClassHistory> lineageOf(Repository repository, int index, ObjectId released,
+                                                       Map<String, CommitChanges> read) {
+        ClassHistories lineage = new ClassHistories();
+        try (RevWalk walk = new RevWalk(repository)) {
+            walk.markStart(walk.parseCommit(released));
+            for (RevCommit commit : walk) {
+                CommitChanges changes = read.get(commit.getName());
+                if (changes != null) {
+                    fold(changes, lineage);
+                }
+            }
+        } catch (IOException e) {
+            log.warn("Unable to walk the history of the release numbered {}: {}. Its counts of commits will "
+                    + "be incomplete", index, e.getMessage());
         }
+        return lineage.freeze(index);
+    }
+
+    /**
+     * Gives every class of a release the counts of commits its own history holds, keeping the measures
+     * read in the order the releases were published. A class the history of the release holds no
+     * commit of counts none.
+     *
+     * @param released the history of each class as the walk of the releases tells it
+     * @param lineage  the history of each class as the commits the release can reach tell it
+     * @return the history of each class of the release
+     */
+    private static Map<String, ClassHistory> withCommitsOf(Map<String, ClassHistory> released,
+                                                           Map<String, ClassHistory> lineage) {
+        Map<String, ClassHistory> combined = new HashMap<>();
+        released.forEach((path, history) ->
+                combined.put(path, history.withCommitsOf(lineage.getOrDefault(path, ClassHistory.UNTOUCHED))));
+        return combined;
     }
 
     /**
@@ -307,5 +396,27 @@ class ReleaseHistoryAnalyzer {
      * @param deleted the lines it removed
      */
     private record LineDelta(long added, long deleted) {
+    }
+
+    /**
+     * What a single commit changed in the classes of the dataset, as the walk of the releases read it
+     * and the replay of the history of each release folds it in again.
+     *
+     * @param author  the identity of whoever wrote it
+     * @param bugFix  whether it fixed a bug
+     * @param changes the classes it changed
+     */
+    private record CommitChanges(String author, boolean bugFix, List<SourceChange> changes) {
+    }
+
+    /**
+     * What a single commit did to a single class of the dataset.
+     *
+     * @param path      the path of the source file after the commit
+     * @param movedFrom the path it was moved from, or {@code null} if the commit moved no class here
+     * @param added     the lines it added
+     * @param deleted   the lines it removed
+     */
+    private record SourceChange(String path, String movedFrom, long added, long deleted) {
     }
 }
