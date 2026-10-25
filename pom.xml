@@ -24,6 +24,7 @@
         <junit.version>4.13.2</junit.version>
         <okhttp.version>5.3.2</okhttp.version>
         <weka.version>3.8.7</weka.version>
+        <weka.smote.version>1.0.3</weka.smote.version>
     </properties>
 
     <dependencyManagement>
@@ -148,6 +149,23 @@
             <groupId>nz.ac.waikato.cms.weka</groupId>
             <artifactId>weka-stable</artifactId>
             <version>${weka.version}</version>
+        </dependency>
+
+        <!-- SMOTE, the Weka package the minority of the training rows is synthesised up through. It is no
+             part of the stable distribution, and its pom asks for weka-dev at an open range: left alone,
+             that would put the latest development line on the classpath beside weka-stable, with two
+             copies of every weka.* class and whichever loads first deciding what is run. Excluded, so
+             that the filter runs against the very engine everything else does -->
+        <dependency>
+            <groupId>nz.ac.waikato.cms.weka</groupId>
+            <artifactId>SMOTE</artifactId>
+            <version>${weka.smote.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>nz.ac.waikato.cms.weka</groupId>
+                    <artifactId>weka-dev</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
     </dependencies>
 

@@ -4,6 +4,7 @@ import it.uniroma2.dicii.isw2.ml.MlSettings;
 import it.uniroma2.dicii.isw2.ml.ModelFactory;
 import it.uniroma2.dicii.isw2.ml.ModelTester;
 import it.uniroma2.dicii.isw2.ml.exception.MlException;
+import it.uniroma2.dicii.isw2.ml.model.BalancingKind;
 import it.uniroma2.dicii.isw2.ml.model.ClassifierKind;
 import it.uniroma2.dicii.isw2.ml.model.EvaluationOutcome;
 import it.uniroma2.dicii.isw2.ml.model.EvaluationPhase;
@@ -28,12 +29,16 @@ import java.time.Instant;
  * and out of the validation figures alone. Re-running this phase after changing one of them on the
  * strength of what it reported would fit the model to the test set by hand, and the figure would stop
  * being an estimate of anything.
+ * <p>
+ * The training set is balanced, by the model the factory builds, and the test set never is: resampling
+ * the releases a model is measured on would change the population the figure is an estimate of.
  */
 @Slf4j
 public class HoldOutTester implements ModelTester {
 
     private final ModelFactory factory;
     private final MlSettings settings;
+    private final EvaluationPhase phase;
 
     /**
      * How many folds the inference phase cuts, which is none: it trains once and predicts once.
@@ -41,27 +46,39 @@ public class HoldOutTester implements ModelTester {
     private static final int NO_FOLDS = 0;
 
     public HoldOutTester(ModelFactory factory, MlSettings settings) {
+        this(factory, settings, EvaluationPhase.TEST);
+    }
+
+    /**
+     * @param factory  what builds the models to train
+     * @param settings which class the per-class figures are read of
+     * @param phase    what the held-out rows are, as the outcome reports it: the test releases, or the
+     *                 later training releases a technique is chosen on
+     */
+    public HoldOutTester(ModelFactory factory, MlSettings settings, EvaluationPhase phase) {
         this.factory = factory;
         this.settings = settings;
+        this.phase = phase;
     }
 
     @Override
-    public EvaluationOutcome test(Instances training, Instances test, ClassifierKind classifier)
-            throws MlException {
+    public EvaluationOutcome test(Instances training, Instances test, ClassifierKind classifier,
+                                  BalancingKind balancing) throws MlException {
         if (!training.equalHeaders(test)) {
             throw new MlException("The training and test rows do not describe the same columns: "
                     + training.equalHeadersMsg(test));
         }
         int positiveClassIndex = EvaluationOutcomes.positiveClassIndex(test, settings.positiveClass());
         Instant start = Instant.now();
-        log.info("Training {} on {} rows and predicting {} held-out ones", classifier.getLabel(),
-                training.numInstances(), test.numInstances());
-        Evaluation evaluation = trainAndPredict(training, test, classifier);
-        EvaluationOutcome outcome = EvaluationOutcomes.from(evaluation, classifier,
-                EvaluationPhase.TEST, NO_FOLDS, positiveClassIndex,
+        log.info("Training {} balanced by {} on {} rows and predicting {} held-out ones",
+                classifier.getLabel(), balancing.getLabel(), training.numInstances(), test.numInstances());
+        Evaluation evaluation = trainAndPredict(training, test, classifier, balancing);
+        EvaluationOutcome outcome = EvaluationOutcomes.from(evaluation, classifier, balancing,
+                phase, NO_FOLDS, positiveClassIndex,
                 Duration.between(start, Instant.now()));
-        log.info("{} predicted the held-out releases at accuracy {} and AUC {} on the buggy class in {}s",
-                classifier.getLabel(), EvaluationOutcomes.rounded(outcome.accuracy()),
+        log.info("{} balanced by {} predicted the held-out releases at accuracy {} and AUC {} on the "
+                        + "buggy class in {}s", classifier.getLabel(), balancing.getLabel(),
+                EvaluationOutcomes.rounded(outcome.accuracy()),
                 EvaluationOutcomes.rounded(outcome.areaUnderRoc()), outcome.elapsed().toSeconds());
         return outcome;
     }
@@ -72,13 +89,14 @@ public class HoldOutTester implements ModelTester {
      * @param training   the rows to train on
      * @param test       the rows to predict
      * @param classifier which model to train, named in the report of a failure
+     * @param balancing  how to balance the training rows
      * @return its predictions of the test rows
      * @throws MlException if the model cannot be trained or asked
      */
-    private Evaluation trainAndPredict(Instances training, Instances test, ClassifierKind classifier)
-            throws MlException {
+    private Evaluation trainAndPredict(Instances training, Instances test, ClassifierKind classifier,
+                                       BalancingKind balancing) throws MlException {
         try {
-            Classifier model = factory.build(classifier);
+            Classifier model = factory.build(classifier, balancing);
             model.buildClassifier(training);
             Evaluation evaluation = new Evaluation(training);
             evaluation.evaluateModel(model, test);
@@ -86,8 +104,8 @@ public class HoldOutTester implements ModelTester {
         } catch (Exception e) {
             // Weka reports everything from an unbuildable classifier to an empty test set as a bare
             // Exception, which leaves nothing more specific to catch
-            throw new MlException("Unable to test " + classifier.getLabel()
-                    + " on the held-out releases", e);
+            throw new MlException("Unable to test " + classifier.getLabel() + " balanced by "
+                    + balancing.getLabel() + " on the held-out releases", e);
         }
     }
 

@@ -3,6 +3,7 @@ package it.uniroma2.dicii.isw2.ml.impl;
 import it.uniroma2.dicii.isw2.ml.DatasetSplitter;
 import it.uniroma2.dicii.isw2.ml.MlSettings;
 import it.uniroma2.dicii.isw2.ml.exception.MlException;
+import it.uniroma2.dicii.isw2.ml.model.BalancingKind;
 import it.uniroma2.dicii.isw2.ml.model.ClassifierKind;
 import it.uniroma2.dicii.isw2.ml.model.DatasetSplit;
 import org.junit.Test;
@@ -115,6 +116,28 @@ public class ReleaseDatasetSplitterTest {
         assertTrue(thrown.getMessage().contains("two places"));
     }
 
+    /**
+     * The rows of the training releases come back with the columns naming them still on, which is what
+     * lets them be split again — a choice made out of the training releases alone has to be cut in time
+     * order too, and the cut is made on the release each row names.
+     */
+    @Test
+    public void testTheTrainingReleasesCanBeSplitAgainInTimeOrder() throws MlException {
+        Instances data = releases(true);
+        DatasetSplitter outer = splitter(0.67);
+        DatasetSplit whole = outer.split(data);
+        Instances history = outer.rowsOfReleases(data, whole.trainingReleases());
+
+        assertEquals(whole.trainingReleases().size() * ROWS_PER_RELEASE, history.numInstances());
+        assertTrue("The columns naming the rows were dropped", data.equalHeaders(history));
+        DatasetSplit study = splitter(0.5).split(history);
+        assertEquals(List.of("1.0.0", "1.0.1"), study.trainingReleases());
+        assertEquals(List.of("1.1.0", "1.1.1"), study.testReleases());
+        for (String release : whole.testReleases()) {
+            assertFalse("A test release was read again", study.testReleases().contains(release));
+        }
+    }
+
     @Test
     public void testADatasetOfASingleReleaseHasNothingToTestOn() {
         Instances single = SyntheticInstances.withReleases(List.of("1.0.0"), ROWS_PER_RELEASE, true);
@@ -127,8 +150,8 @@ public class ReleaseDatasetSplitterTest {
      * @return a splitter cutting there
      */
     private static DatasetSplitter splitter(double trainingFraction) {
-        MlSettings settings = new MlSettings(List.of(ClassifierKind.NAIVE_BAYES), trainingFraction, 2, 1,
-                SyntheticInstances.BUGGY, 1, 10, 1);
+        MlSettings settings = new MlSettings(List.of(ClassifierKind.NAIVE_BAYES), List.of(BalancingKind.NONE),
+                trainingFraction, 2, 1, SyntheticInstances.BUGGY, 1, 10, 1);
         return new ReleaseDatasetSplitter(settings, FILE);
     }
 

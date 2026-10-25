@@ -2,6 +2,7 @@ package it.uniroma2.dicii.isw2.ml.impl;
 
 import it.uniroma2.dicii.isw2.ml.MlSettings;
 import it.uniroma2.dicii.isw2.ml.ModelFactory;
+import it.uniroma2.dicii.isw2.ml.model.BalancingKind;
 import it.uniroma2.dicii.isw2.ml.model.ClassifierKind;
 import org.junit.Before;
 import org.junit.Test;
@@ -31,20 +32,34 @@ public class WekaClassifierFactoryTest {
 
     @Before
     public void setUp() {
-        factory = new WekaClassifierFactory(new MlSettings(List.of(ClassifierKind.values()), 0.67, 2, SEED,
-                SyntheticInstances.BUGGY, THREADS, TREES, NEIGHBOURS));
+        factory = new WekaClassifierFactory(new MlSettings(List.of(ClassifierKind.values()),
+                List.of(BalancingKind.NONE), 0.67, 2, SEED, SyntheticInstances.BUGGY, THREADS, TREES, NEIGHBOURS));
     }
 
     @Test
     public void testEachKindBuildsTheClassifierItNames() {
-        assertTrue(factory.build(ClassifierKind.RANDOM_FOREST) instanceof RandomForest);
-        assertTrue(factory.build(ClassifierKind.NAIVE_BAYES) instanceof NaiveBayes);
-        assertTrue(factory.build(ClassifierKind.IBK) instanceof IBk);
+        assertTrue(model(ClassifierKind.RANDOM_FOREST) instanceof RandomForest);
+        assertTrue(model(ClassifierKind.NAIVE_BAYES) instanceof NaiveBayes);
+        assertTrue(model(ClassifierKind.IBK) instanceof IBk);
+    }
+
+    /**
+     * Every model is trained through the balancing wrapper, the rows left as they are included, so that
+     * two techniques differ by the technique and never by the path the model was trained through.
+     */
+    @Test
+    public void testEveryModelComesWrappedInItsBalancingWhateverTheTechnique() {
+        for (ClassifierKind kind : ClassifierKind.values()) {
+            for (BalancingKind balancing : BalancingKind.values()) {
+                assertTrue(kind.getLabel() + " balanced by " + balancing.getLabel() + " was not wrapped",
+                        factory.build(kind, balancing) instanceof BalancedClassifier);
+            }
+        }
     }
 
     @Test
     public void testTheForestIsGrownAsConfigured() {
-        RandomForest forest = (RandomForest) factory.build(ClassifierKind.RANDOM_FOREST);
+        RandomForest forest = (RandomForest) model(ClassifierKind.RANDOM_FOREST);
         assertEquals(TREES, forest.getNumIterations());
         assertEquals(SEED, forest.getSeed());
         assertEquals(THREADS, forest.getNumExecutionSlots());
@@ -56,7 +71,7 @@ public class WekaClassifierFactoryTest {
      */
     @Test
     public void testTheNeighboursAreCountedAsConfiguredAndSearchedThroughATree() {
-        IBk classifier = (IBk) factory.build(ClassifierKind.IBK);
+        IBk classifier = (IBk) model(ClassifierKind.IBK);
         assertEquals(NEIGHBOURS, classifier.getKNN());
         assertTrue(classifier.getNearestNeighbourSearchAlgorithm() instanceof KDTree);
     }
@@ -68,10 +83,18 @@ public class WekaClassifierFactoryTest {
     @Test
     public void testEveryCallBuildsAModelOfItsOwn() {
         for (ClassifierKind kind : ClassifierKind.values()) {
-            Classifier first = factory.build(kind);
-            Classifier second = factory.build(kind);
+            Classifier first = factory.build(kind, BalancingKind.NONE);
+            Classifier second = factory.build(kind, BalancingKind.NONE);
             assertNotSame(kind.getLabel() + " was handed out twice", first, second);
         }
+    }
+
+    /**
+     * @param kind which model to build
+     * @return it, as the factory configured it, out of the balancing wrapper it comes in
+     */
+    private Classifier model(ClassifierKind kind) {
+        return ((BalancedClassifier) factory.build(kind, BalancingKind.NONE)).getClassifier();
     }
 
 }

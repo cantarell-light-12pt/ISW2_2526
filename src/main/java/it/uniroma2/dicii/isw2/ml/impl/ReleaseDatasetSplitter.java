@@ -127,6 +127,18 @@ public class ReleaseDatasetSplitter implements DatasetSplitter {
         return bounded;
     }
 
+    @Override
+    public Instances rowsOfReleases(Instances data, List<String> releases) {
+        Set<String> kept = new HashSet<>(releases);
+        Instances rows = new Instances(data, 0);
+        for (int i = 0; i < data.numInstances(); i++) {
+            if (kept.contains(data.instance(i).stringValue(VERSION_COLUMN))) {
+                rows.add(data.instance(i));
+            }
+        }
+        return rows;
+    }
+
     /**
      * Collects the rows of the given releases, and strips the columns naming them.
      *
@@ -136,13 +148,7 @@ public class ReleaseDatasetSplitter implements DatasetSplitter {
      * @throws MlException if the identity columns cannot be dropped
      */
     private Instances rowsOf(Instances data, List<String> releases) throws MlException {
-        Set<String> kept = new HashSet<>(releases);
-        Instances rows = new Instances(data, 0);
-        for (int i = 0; i < data.numInstances(); i++) {
-            if (kept.contains(data.instance(i).stringValue(VERSION_COLUMN))) {
-                rows.add(data.instance(i));
-            }
-        }
+        Instances rows = rowsOfReleases(data, releases);
         try {
             return WekaCsvDatasetReader.withoutIdentityColumns(file, rows);
         } catch (DatasetException e) {

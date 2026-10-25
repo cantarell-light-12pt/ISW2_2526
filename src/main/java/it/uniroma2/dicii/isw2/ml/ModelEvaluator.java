@@ -1,6 +1,7 @@
 package it.uniroma2.dicii.isw2.ml;
 
 import it.uniroma2.dicii.isw2.ml.exception.MlException;
+import it.uniroma2.dicii.isw2.ml.model.BalancingKind;
 import it.uniroma2.dicii.isw2.ml.model.ClassifierKind;
 import it.uniroma2.dicii.isw2.ml.model.EvaluationOutcome;
 import weka.core.Instances;
@@ -12,7 +13,9 @@ import weka.core.Instances;
  * Neither of the two things that vary is fixed by this interface, which is the point of its shape: the
  * model is named by a {@link ClassifierKind} rather than built here, and the dataset arrives as
  * {@code Instances} rather than as the path they were read from — so a dataset a feature selection has
- * reduced is measured through the very same call as the one the extraction workflow wrote.
+ * reduced is measured through the very same call as the one the extraction workflow wrote. How the rows
+ * a model is trained on are balanced is named the same way, by a {@link BalancingKind}, and it is the
+ * implementation's to make sure that only those rows are.
  */
 public interface ModelEvaluator {
 
@@ -21,9 +24,11 @@ public interface ModelEvaluator {
      *
      * @param data       the rows to train and test on, labelled, with their class attribute set
      * @param classifier which model to train
+     * @param balancing  how to balance the rows it is trained on, leaving the ones it is tested on alone
      * @return how it scored
      * @throws MlException if the model cannot be trained or measured
      */
-    EvaluationOutcome evaluate(Instances data, ClassifierKind classifier) throws MlException;
+    EvaluationOutcome evaluate(Instances data, ClassifierKind classifier, BalancingKind balancing)
+            throws MlException;
 
 }

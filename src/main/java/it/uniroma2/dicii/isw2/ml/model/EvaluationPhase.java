@@ -4,7 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 /**
- * The two occasions a model is measured on, which the report tells apart because they answer different
+ * The occasions a model is measured on, which the report tells apart because they answer different
  * questions.
  */
 @Getter
@@ -23,7 +23,14 @@ public enum EvaluationPhase {
      * this point. It says how well the model predicts releases it has never seen, which is the figure
      * the project is finally reported on.
      */
-    TEST("test");
+    TEST("test"),
+
+    /**
+     * Trained on the earlier of the training releases and asked about the later ones, to choose how the
+     * training rows are balanced. Held out like the test phase and drawn from the training releases like
+     * the validation, so that the choice is made in time order and costs the test releases nothing.
+     */
+    SELECTION("selection");
 
     /**
      * How the phase reads in the report.

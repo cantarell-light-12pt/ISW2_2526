@@ -1,6 +1,7 @@
 package it.uniroma2.dicii.isw2.ml;
 
 import it.uniroma2.dicii.isw2.ml.exception.MlException;
+import it.uniroma2.dicii.isw2.ml.model.BalancingKind;
 import it.uniroma2.dicii.isw2.ml.model.ClassifierKind;
 import it.uniroma2.dicii.isw2.properties.PropertiesManager;
 import lombok.extern.slf4j.Slf4j;
@@ -13,22 +14,26 @@ import java.util.List;
  * <p>
  * Which models are measured is one of them rather than something the code names, because the comparison
  * is meant to grow: the workflow loops over this list, so running the three classifiers instead of one
- * is an edit to the properties file and no edit at all here.
+ * is an edit to the properties file and no edit at all here. How the training rows are balanced is a
+ * list for the same reason, and every model is measured under every technique on it.
  *
  * @param classifiers            the models to train and measure, in the order they are reported
+ * @param balancingTechniques    how the two classes of the training rows are brought to the same size,
+ *                               one technique per measurement of each model, in the order they are
+ *                               reported
  * @param trainingFraction       which share of the releases a model is trained on, the rest being held
  *                               back to test it on
  * @param folds                  how many folds each of them is cross-validated over
- * @param seed                   what the folds are drawn with, so that two runs agree
+ * @param seed                   what the folds and the samples are drawn with, so that two runs agree
  * @param positiveClass          the label a per-class measure is read of, as it reads in the dataset
  * @param threads                how many threads a model that can spread itself may use
  * @param randomForestIterations how many trees a forest is grown with
  * @param ibkNeighbours          how many neighbours a nearest-neighbour classifier votes among
  */
 @Slf4j
-public record MlSettings(List<ClassifierKind> classifiers, double trainingFraction, int folds, int seed,
-                         String positiveClass, int threads, int randomForestIterations,
-                         int ibkNeighbours) {
+public record MlSettings(List<ClassifierKind> classifiers, List<BalancingKind> balancingTechniques,
+                         double trainingFraction, int folds, int seed, String positiveClass, int threads,
+                         int randomForestIterations, int ibkNeighbours) {
 
     private static final String PREFIX = "project.ml.";
 
@@ -39,6 +44,14 @@ public record MlSettings(List<ClassifierKind> classifiers, double trainingFracti
         }
         // Copied, so that the list the settings were built from cannot be written into behind them
         classifiers = List.copyOf(classifiers);
+        // Named rather than defaulted to NONE, so that "the rows were not balanced" is something the
+        // settings were told and never something they fell back on
+        if (balancingTechniques == null || balancingTechniques.isEmpty()) {
+            throw new IllegalArgumentException("How the training rows are balanced has to be named "
+                    + "through '" + PREFIX + "balancing', even when the answer is "
+                    + BalancingKind.NONE.getLabel());
+        }
+        balancingTechniques = List.copyOf(balancingTechniques);
         // Written as what is rejected rather than as the negation of what is accepted, so that it reads
         // as the sentence below it. NaN fails every comparison, so it falls through neither test and is
         // rejected here as well
@@ -65,6 +78,24 @@ public record MlSettings(List<ClassifierKind> classifiers, double trainingFracti
     }
 
     /**
+     * @param fraction which share of the releases to train on instead
+     * @return these settings, cutting the releases there
+     * @throws IllegalArgumentException if the share leaves no release on one of the two sides
+     */
+    public MlSettings withTrainingFraction(double fraction) {
+        return new MlSettings(classifiers, balancingTechniques, fraction, folds, seed, positiveClass,
+                threads, randomForestIterations, ibkNeighbours);
+    }
+
+    /**
+     * @return which share of the training releases the balancing study trains on, the rest of them being
+     * what each technique is compared over — two thirds when the property leaves it open
+     */
+    public static double balancingStudyTrainingFraction() {
+        return number("balancingStudy.trainingFraction", 0.66);
+    }
+
+    /**
      * Reads the settings out of the properties of the project, falling back on the values below for any
      * of them the file does not carry.
      *
@@ -74,6 +105,7 @@ public record MlSettings(List<ClassifierKind> classifiers, double trainingFracti
     public static MlSettings load() throws MlException {
         return new MlSettings(
                 configuredClassifiers(),
+                configuredBalancing(),
                 number("trainingFraction", 0.67),
                 integer("folds", 10),
                 integer("seed", 1),
@@ -88,14 +120,39 @@ public record MlSettings(List<ClassifierKind> classifiers, double trainingFracti
      * @throws MlException if one of those names belongs to no classifier
      */
     private static List<ClassifierKind> configuredClassifiers() throws MlException {
-        String configured = stringify("classifiers", ClassifierKind.RANDOM_FOREST.getLabel());
-        List<ClassifierKind> classifiers = new ArrayList<>();
-        for (String label : configured.split(",")) {
+        return labels("classifiers", ClassifierKind.RANDOM_FOREST.getLabel(), ClassifierKind::from);
+    }
+
+    /**
+     * @return the techniques the two classes of the training rows are brought to the same size with, as
+     * the comma-separated list of names the property holds — the rows as they are when it leaves it
+     * open, which is what the other two are read against
+     * @throws MlException if one of those names belongs to no technique
+     */
+    private static List<BalancingKind> configuredBalancing() throws MlException {
+        return labels("balancing", BalancingKind.NONE.getLabel(), BalancingKind::from);
+    }
+
+    /**
+     * Reads a comma-separated list of names out of the properties, in the order it is written, skipping
+     * the blank entries a trailing comma leaves.
+     *
+     * @param key      the property, without its prefix
+     * @param fallback the list to read when the property leaves it open
+     * @param resolver what turns one name into what it names
+     * @param <T>      what the names name
+     * @return what they name
+     * @throws MlException if one of the names names nothing
+     */
+    private static <T> List<T> labels(String key, String fallback, LabelResolver<T> resolver)
+            throws MlException {
+        List<T> resolved = new ArrayList<>();
+        for (String label : stringify(key, fallback).split(",")) {
             if (!label.isBlank()) {
-                classifiers.add(ClassifierKind.from(label.trim()));
+                resolved.add(resolver.resolve(label.trim()));
             }
         }
-        return classifiers;
+        return resolved;
     }
 
     /**
@@ -137,6 +194,24 @@ public record MlSettings(List<ClassifierKind> classifiers, double trainingFracti
                     PREFIX, key, value, fallback);
             return fallback;
         }
+    }
+
+    /**
+     * Turns the name an option reads as in the configuration into the option, as the {@code from} of
+     * each of the enums the settings list does.
+     *
+     * @param <T> the option
+     */
+    @FunctionalInterface
+    private interface LabelResolver<T> {
+
+        /**
+         * @param label the name to resolve
+         * @return the option it names
+         * @throws MlException if it names none
+         */
+        T resolve(String label) throws MlException;
+
     }
 
 }
