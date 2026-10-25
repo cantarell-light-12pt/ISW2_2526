@@ -150,8 +150,41 @@ public class ReleaseHistoryAnalyzerTest {
                 2, history.get(1).get(MOVED).revisions());
         ClassHistory maintained = history.get(2).get(MERGED);
         assertNotNull("The release that has not moved it still knows it under its old one", maintained);
-        assertEquals("Its history is the one of the class, not of the path", 3, maintained.revisions());
+        assertEquals("Its history is the one its line holds, which the move is no part of", 2, maintained.revisions());
         assertEquals("A class is as old as the oldest of its paths", 2, maintained.age());
+    }
+
+    /**
+     * Two lines released in turn: the maintenance one, holding a bug fix written by somebody else, then
+     * the main one, which does not hold it. The counts of commits of the second release are the ones
+     * of its own history, while the churn and the age are read in the order the releases came out.
+     */
+    @Test
+    public void testAReleaseCountsTheCommitsOfItsOwnHistoryAlone() throws Exception {
+        Path repoPath = folder.getRoot().toPath();
+        String fix;
+        String mainRelease;
+        try (Git git = Git.init().setDirectory(folder.getRoot()).call()) {
+            write(repoPath, MERGED, THREE_LINES);
+            String common = commit(git, "First");
+            String main = git.getRepository().getFullBranch();
+
+            git.checkout().setStartPoint(common).setCreateBranch(true).setName("maintenance").call();
+            write(repoPath, MERGED, FIVE_LINES);
+            fix = commit(git, "APP-1 Fix it on the maintenance line", "Bob", "bob@example.com");
+
+            git.checkout().setName(main).call();
+            write(repoPath, MERGED, THREE_LINES + "// one\n");
+            mainRelease = commit(git, "One line more on the main line");
+        }
+
+        ClassHistory history = analyse(repoPath, Set.of(fix), fix, mainRelease).get(2).get(MERGED);
+        assertEquals("The first commit and the one of the main line", 2, history.revisions());
+        assertEquals("Bob only wrote on the other line", 1, history.authors());
+        assertEquals("Three lines written and one appended", 4, history.sizeChange());
+        assertEquals("The fix is no part of this release", 0, history.totalBugFixes());
+        assertEquals("What this release brought in after the maintenance one", 1, history.churn());
+        assertEquals("Two releases have come out since the class was written", 2, history.age());
     }
 
     /**
@@ -195,6 +228,20 @@ public class ReleaseHistoryAnalyzerTest {
      */
     private static Map<Integer, Map<String, ClassHistory>> analyse(Path repoPath, String... commitIds)
             throws MetricsException {
+        return analyse(repoPath, Set.of(), commitIds);
+    }
+
+    /**
+     * Reads the history of a repository holding one or two releases, as
+     * {@link #analyse(Path, String...)} does, telling the commits that fixed a bug apart.
+     *
+     * @param repoPath  the root directory of the repository
+     * @param bugFixes  the commits that fixed a bug
+     * @param commitIds the commits the releases are tagged on, the second one optional
+     * @return the history of the classes of each release, keyed by its ordinal index
+     */
+    private static Map<Integer, Map<String, ClassHistory>> analyse(Path repoPath, Set<String> bugFixes,
+                                                                   String... commitIds) throws MetricsException {
         SourceFilter filter = new PathSourceFilter(".git,test,target", "*Test.java");
         List<Version> versions = new ArrayList<>();
         for (String commitId : commitIds) {
@@ -206,7 +253,7 @@ public class ReleaseHistoryAnalyzerTest {
                 versions.add(version);
             }
         }
-        return new ReleaseHistoryAnalyzer(filter, Set.of()).analyse(repoPath, versions);
+        return new ReleaseHistoryAnalyzer(filter, bugFixes).analyse(repoPath, versions);
     }
 
     private static void write(Path repoPath, String path, String content) throws IOException {
@@ -226,14 +273,18 @@ public class ReleaseHistoryAnalyzerTest {
     }
 
     private static String commit(Git git, String message) throws GitAPIException {
+        return commit(git, message, "Alice", "alice@example.com");
+    }
+
+    private static String commit(Git git, String message, String author, String email) throws GitAPIException {
         git.add().addFilepattern(".").call();
         // Staging the tracked files as well is what records the source a move left behind as deleted,
         // without which the move would read as the file having been written anew
         git.add().setUpdate(true).addFilepattern(".").call();
         return git.commit()
                 .setMessage(message)
-                .setAuthor("Alice", "alice@example.com")
-                .setCommitter("Alice", "alice@example.com")
+                .setAuthor(author, email)
+                .setCommitter(author, email)
                 .setSign(false)
                 .call()
                 .getName();
