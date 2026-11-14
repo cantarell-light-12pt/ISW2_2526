@@ -4,11 +4,14 @@ import it.uniroma2.dicii.isw2.ml.MlSettings;
 import it.uniroma2.dicii.isw2.ml.ModelFactory;
 import it.uniroma2.dicii.isw2.ml.model.BalancingKind;
 import it.uniroma2.dicii.isw2.ml.model.ClassifierKind;
+import it.uniroma2.dicii.isw2.ml.model.FeatureSelectionKind;
+import it.uniroma2.dicii.isw2.ml.model.ModelConfiguration;
 import org.junit.Before;
 import org.junit.Test;
 import weka.classifiers.Classifier;
 import weka.classifiers.bayes.NaiveBayes;
 import weka.classifiers.lazy.IBk;
+import weka.classifiers.meta.AttributeSelectedClassifier;
 import weka.classifiers.trees.RandomForest;
 import weka.core.neighboursearch.KDTree;
 
@@ -33,7 +36,8 @@ public class WekaClassifierFactoryTest {
     @Before
     public void setUp() {
         factory = new WekaClassifierFactory(new MlSettings(List.of(ClassifierKind.values()),
-                List.of(BalancingKind.NONE), 0.67, 2, SEED, SyntheticInstances.BUGGY, THREADS, TREES, NEIGHBOURS));
+                List.of(BalancingKind.NONE), List.of(FeatureSelectionKind.NONE), 0.67, 2, SEED,
+                SyntheticInstances.BUGGY, THREADS, TREES, NEIGHBOURS, 1));
     }
 
     @Test
@@ -52,7 +56,25 @@ public class WekaClassifierFactoryTest {
         for (ClassifierKind kind : ClassifierKind.values()) {
             for (BalancingKind balancing : BalancingKind.values()) {
                 assertTrue(kind.getLabel() + " balanced by " + balancing.getLabel() + " was not wrapped",
-                        factory.build(kind, balancing) instanceof BalancedClassifier);
+                        factory.build(SyntheticInstances.configuration(kind, balancing))
+                                instanceof BalancedClassifier);
+            }
+        }
+    }
+
+    /**
+     * The attributes are chosen out of the rows as they are and it is the rows reduced to them that are
+     * balanced, so the selection goes around the balancing and never inside it.
+     */
+    @Test
+    public void testASelectingModelChoosesItsAttributesBeforeItsRowsAreBalanced() {
+        for (FeatureSelectionKind selection : FeatureSelectionKind.values()) {
+            if (selection != FeatureSelectionKind.NONE) {
+                Classifier model = factory.build(
+                        new ModelConfiguration(ClassifierKind.NAIVE_BAYES, BalancingKind.SMOTE, selection));
+                assertTrue(selection.getLabel() + " does not select", model instanceof AttributeSelectedClassifier);
+                assertTrue(selection.getLabel() + " selects inside the balancing",
+                        ((AttributeSelectedClassifier) model).getClassifier() instanceof BalancedClassifier);
             }
         }
     }
@@ -83,8 +105,8 @@ public class WekaClassifierFactoryTest {
     @Test
     public void testEveryCallBuildsAModelOfItsOwn() {
         for (ClassifierKind kind : ClassifierKind.values()) {
-            Classifier first = factory.build(kind, BalancingKind.NONE);
-            Classifier second = factory.build(kind, BalancingKind.NONE);
+            Classifier first = factory.build(SyntheticInstances.configuration(kind, BalancingKind.NONE));
+            Classifier second = factory.build(SyntheticInstances.configuration(kind, BalancingKind.NONE));
             assertNotSame(kind.getLabel() + " was handed out twice", first, second);
         }
     }
@@ -94,7 +116,8 @@ public class WekaClassifierFactoryTest {
      * @return it, as the factory configured it, out of the balancing wrapper it comes in
      */
     private Classifier model(ClassifierKind kind) {
-        return ((BalancedClassifier) factory.build(kind, BalancingKind.NONE)).getClassifier();
+        return ((BalancedClassifier) factory.build(SyntheticInstances.configuration(kind, BalancingKind.NONE)))
+                .getClassifier();
     }
 
 }

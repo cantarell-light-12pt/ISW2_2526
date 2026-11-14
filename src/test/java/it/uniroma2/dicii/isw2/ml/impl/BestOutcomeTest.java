@@ -4,21 +4,24 @@ import it.uniroma2.dicii.isw2.ml.model.BalancingKind;
 import it.uniroma2.dicii.isw2.ml.model.ClassifierKind;
 import it.uniroma2.dicii.isw2.ml.model.EvaluationOutcome;
 import it.uniroma2.dicii.isw2.ml.model.EvaluationPhase;
+import it.uniroma2.dicii.isw2.ml.model.FeatureSelectionKind;
 import it.uniroma2.dicii.isw2.ml.model.Measure;
 import org.junit.Test;
 
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Predicate;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 
 /**
- * Checks that the technique a measure picks is the one the model scored highest under, and that the
- * cases where "highest" is unclear — a tie, a figure that is no number — are settled the documented way.
+ * Checks that the technique a measure picks is the one the model scored highest under, that only the
+ * outcomes the choice is among are compared, and that the cases where "highest" is unclear — a tie, a
+ * figure that is no number — are settled the documented way.
  */
-public class BestBalancingTest {
+public class BestOutcomeTest {
 
     private static final double TOLERANCE = 1e-9;
 
@@ -72,8 +75,24 @@ public class BestBalancingTest {
     public void testAModelThatScoredNoNumberAnywhereHasNoVerdict() {
         List<EvaluationOutcome> outcomes = List.of(
                 outcome(ClassifierKind.NAIVE_BAYES, BalancingKind.NONE, Double.NaN));
-        assertFalse(BestBalancing.of(outcomes, ClassifierKind.NAIVE_BAYES, Measure.F1).isPresent());
-        assertFalse(BestBalancing.of(outcomes, ClassifierKind.IBK, Measure.F1).isPresent());
+        assertFalse(BestOutcome.of(outcomes, of(ClassifierKind.NAIVE_BAYES), Measure.F1).isPresent());
+        assertFalse(BestOutcome.of(outcomes, of(ClassifierKind.IBK), Measure.F1).isPresent());
+    }
+
+    /**
+     * The feature selection is chosen per model and balancing technique, so a selection scoring higher
+     * under another technique says nothing about the one asked about.
+     */
+    @Test
+    public void testAChoiceAmongTheSelectionsOfOneTechniqueIgnoresTheOthers() {
+        List<EvaluationOutcome> outcomes = List.of(
+                outcome(BalancingKind.NONE, FeatureSelectionKind.NONE, 0.60),
+                outcome(BalancingKind.NONE, FeatureSelectionKind.INFO_GAIN, 0.65),
+                outcome(BalancingKind.SMOTE, FeatureSelectionKind.NONE, 0.70),
+                outcome(BalancingKind.SMOTE, FeatureSelectionKind.FORWARD_SEARCH, 0.99));
+        Optional<EvaluationOutcome> best = BestOutcome.of(outcomes,
+                candidate -> candidate.balancing() == BalancingKind.NONE, Measure.F1);
+        assertEquals(FeatureSelectionKind.INFO_GAIN, best.orElseThrow().featureSelection());
     }
 
     /**
@@ -83,7 +102,7 @@ public class BestBalancingTest {
     @Test
     public void testEveryMeasureReadsTheFigureItIsNamedAfter() {
         EvaluationOutcome outcome = new EvaluationOutcome(ClassifierKind.IBK, BalancingKind.NONE,
-                EvaluationPhase.SELECTION, 0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, Duration.ZERO);
+                FeatureSelectionKind.NONE, EvaluationPhase.SELECTION, 0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, Duration.ZERO);
         assertEquals(0.1, Measure.ACCURACY.of(outcome), TOLERANCE);
         assertEquals(0.4, Measure.F1.of(outcome), TOLERANCE);
         assertEquals(0.5, Measure.AUC.of(outcome), TOLERANCE);
@@ -96,8 +115,16 @@ public class BestBalancingTest {
      * @return the technique F1 picks for it
      */
     private static BalancingKind picked(List<EvaluationOutcome> outcomes, ClassifierKind classifier) {
-        Optional<EvaluationOutcome> best = BestBalancing.of(outcomes, classifier, Measure.F1);
+        Optional<EvaluationOutcome> best = BestOutcome.of(outcomes, of(classifier), Measure.F1);
         return best.orElseThrow().balancing();
+    }
+
+    /**
+     * @param classifier the model to choose for
+     * @return the outcomes of that model, which is what the balancing study chooses among
+     */
+    private static Predicate<EvaluationOutcome> of(ClassifierKind classifier) {
+        return candidate -> candidate.classifier() == classifier;
     }
 
     /**
@@ -107,8 +134,20 @@ public class BestBalancingTest {
      * @return the outcome, every other figure at a value that would make a different winner of it
      */
     private static EvaluationOutcome outcome(ClassifierKind classifier, BalancingKind balancing, double f1) {
-        return new EvaluationOutcome(classifier, balancing, EvaluationPhase.SELECTION, 0, 1 - f1, 1 - f1,
-                1 - f1, f1, 1 - f1, 1 - f1, Duration.ZERO);
+        return new EvaluationOutcome(classifier, balancing, FeatureSelectionKind.NONE, EvaluationPhase.SELECTION,
+                0, 1 - f1, 1 - f1, 1 - f1, f1, 1 - f1, 1 - f1, Duration.ZERO);
+    }
+
+    /**
+     * @param balancing        under which technique a forest scored
+     * @param featureSelection on which attributes
+     * @param f1               the F1 it scored
+     * @return the outcome, measured by validation as the feature selection study measures it
+     */
+    private static EvaluationOutcome outcome(BalancingKind balancing, FeatureSelectionKind featureSelection,
+                                             double f1) {
+        return new EvaluationOutcome(ClassifierKind.RANDOM_FOREST, balancing, featureSelection,
+                EvaluationPhase.VALIDATION, 2, 1 - f1, 1 - f1, 1 - f1, f1, 1 - f1, 1 - f1, Duration.ZERO);
     }
 
 }

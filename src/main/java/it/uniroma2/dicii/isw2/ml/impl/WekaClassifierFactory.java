@@ -1,10 +1,11 @@
 package it.uniroma2.dicii.isw2.ml.impl;
 
 import it.uniroma2.dicii.isw2.ml.BalancerFactory;
+import it.uniroma2.dicii.isw2.ml.FeatureSelector;
 import it.uniroma2.dicii.isw2.ml.MlSettings;
 import it.uniroma2.dicii.isw2.ml.ModelFactory;
-import it.uniroma2.dicii.isw2.ml.model.BalancingKind;
 import it.uniroma2.dicii.isw2.ml.model.ClassifierKind;
+import it.uniroma2.dicii.isw2.ml.model.ModelConfiguration;
 import weka.classifiers.Classifier;
 import weka.classifiers.bayes.NaiveBayes;
 import weka.classifiers.lazy.IBk;
@@ -21,24 +22,34 @@ import weka.core.neighboursearch.KDTree;
  * Every one of them comes wrapped in a {@link BalancedClassifier}, the rows left as they are included:
  * a model is then trained through the same path whatever technique it was configured with, and the
  * figures of two techniques differ by the technique and by nothing else.
+ * <p>
+ * The feature selection goes around the balancing, not inside it: the attributes are chosen out of the
+ * training rows as they are, and it is the rows reduced to them that are balanced. Choosing them out of
+ * balanced rows instead would have SMOTE's synthetic rows, interpolated over every attribute, vote on
+ * which attributes the real ones are told apart by. A model keeping every attribute is not wrapped at
+ * all, so that it is, to the last digit, the model measured before selection existed.
  */
 public class WekaClassifierFactory implements ModelFactory {
 
     private final MlSettings settings;
     private final BalancerFactory balancers;
+    private final FeatureSelector selector;
 
     public WekaClassifierFactory(MlSettings settings) {
-        this(settings, new WekaBalancerFactory(settings));
+        this(settings, new WekaBalancerFactory(settings), new WekaFeatureSelector(settings));
     }
 
-    public WekaClassifierFactory(MlSettings settings, BalancerFactory balancers) {
+    public WekaClassifierFactory(MlSettings settings, BalancerFactory balancers, FeatureSelector selector) {
         this.settings = settings;
         this.balancers = balancers;
+        this.selector = selector;
     }
 
     @Override
-    public Classifier build(ClassifierKind kind, BalancingKind balancing) {
-        return new BalancedClassifier(model(kind), balancers.build(balancing));
+    public Classifier build(ModelConfiguration configuration) {
+        Classifier balanced = new BalancedClassifier(model(configuration.classifier()),
+                balancers.build(configuration.balancing()));
+        return selector.selecting(balanced, configuration.featureSelection());
     }
 
     /**

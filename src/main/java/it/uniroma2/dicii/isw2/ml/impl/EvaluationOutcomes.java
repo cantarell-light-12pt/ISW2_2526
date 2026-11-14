@@ -1,10 +1,9 @@
 package it.uniroma2.dicii.isw2.ml.impl;
 
 import it.uniroma2.dicii.isw2.ml.exception.MlException;
-import it.uniroma2.dicii.isw2.ml.model.BalancingKind;
-import it.uniroma2.dicii.isw2.ml.model.ClassifierKind;
 import it.uniroma2.dicii.isw2.ml.model.EvaluationOutcome;
 import it.uniroma2.dicii.isw2.ml.model.EvaluationPhase;
+import it.uniroma2.dicii.isw2.ml.model.ModelConfiguration;
 import weka.classifiers.Evaluation;
 import weka.core.Attribute;
 import weka.core.Instances;
@@ -27,18 +26,19 @@ final class EvaluationOutcomes {
 
     /**
      * @param evaluation         the predictions to read
-     * @param classifier         which model made them
-     * @param balancing          how the rows it was trained on were balanced
+     * @param configuration      which model made them, how the rows it was trained on were balanced
+     *                           and which of their attributes it was trained on
      * @param phase              on which occasion
      * @param folds              how many folds it was cross-validated over, or zero if it was not
      * @param positiveClassIndex which value of the label the per-class measures are read of
      * @param elapsed            how long the phase took
      * @return what it scored
      */
-    static EvaluationOutcome from(Evaluation evaluation, ClassifierKind classifier,
-                                  BalancingKind balancing, EvaluationPhase phase, int folds,
-                                  int positiveClassIndex, Duration elapsed) {
-        return new EvaluationOutcome(classifier, balancing, phase, folds, evaluation.pctCorrect() / 100,
+    static EvaluationOutcome from(Evaluation evaluation, ModelConfiguration configuration,
+                                  EvaluationPhase phase, int folds, int positiveClassIndex,
+                                  Duration elapsed) {
+        return new EvaluationOutcome(configuration.classifier(), configuration.balancing(),
+                configuration.featureSelection(), phase, folds, evaluation.pctCorrect() / 100,
                 evaluation.precision(positiveClassIndex), evaluation.recall(positiveClassIndex),
                 evaluation.fMeasure(positiveClassIndex), evaluation.areaUnderROC(positiveClassIndex),
                 evaluation.kappa(), elapsed);

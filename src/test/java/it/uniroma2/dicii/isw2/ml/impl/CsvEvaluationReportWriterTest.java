@@ -5,6 +5,7 @@ import it.uniroma2.dicii.isw2.ml.model.BalancingKind;
 import it.uniroma2.dicii.isw2.ml.model.ClassifierKind;
 import it.uniroma2.dicii.isw2.ml.model.EvaluationOutcome;
 import it.uniroma2.dicii.isw2.ml.model.EvaluationPhase;
+import it.uniroma2.dicii.isw2.ml.model.FeatureSelectionKind;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -27,7 +28,8 @@ import static org.junit.Assert.assertTrue;
  */
 public class CsvEvaluationReportWriterTest {
 
-    private static final List<String> COLUMNS = List.of("Classifier", "Balancing", "Phase", "Folds",
+    private static final List<String> COLUMNS = List.of("Classifier", "Balancing", "FeatureSelection",
+            "Phase", "Folds",
             "Accuracy", "Precision", "Recall", "F1", "AUC", "Kappa", "ElapsedSeconds");
 
     @Rule
@@ -52,7 +54,7 @@ public class CsvEvaluationReportWriterTest {
 
     @Test
     public void testTheHeaderNamesEveryMeasureAndTheDirectoryIsCreated() throws MlException, IOException {
-        try (CsvEvaluationReportWriter report = CsvEvaluationReportWriter.open(file)) {
+        try (CsvEvaluationReportWriter ignored = CsvEvaluationReportWriter.open(file)) {
             assertTrue("The directory meant to hold the report was not created", Files.exists(file));
         }
         assertEquals(List.of(String.join(",", COLUMNS)), lines());
@@ -65,7 +67,7 @@ public class CsvEvaluationReportWriterTest {
         }
         List<String> lines = lines();
         assertEquals(2, lines.size());
-        assertEquals("RandomForest,None,validation,10,0.8532,0.4211,0.3125,0.3587,0.7419,0.2604,12",
+        assertEquals("RandomForest,None,None,validation,10,0.8532,0.4211,0.3125,0.3587,0.7419,0.2604,12",
                 lines.get(1));
     }
 
@@ -76,12 +78,14 @@ public class CsvEvaluationReportWriterTest {
     @Test
     public void testTheInferencePhaseIsWrittenWithNoFoldCount() throws MlException, IOException {
         try (CsvEvaluationReportWriter report = CsvEvaluationReportWriter.open(file)) {
-            report.write(new EvaluationOutcome(ClassifierKind.IBK, BalancingKind.SMOTE, EvaluationPhase.TEST,
-                    0, 0.71, 0.32, 0.28, 0.2989, 0.6104, 0.1183, Duration.ofSeconds(3)));
+            report.write(new EvaluationOutcome(ClassifierKind.IBK, BalancingKind.SMOTE,
+                    FeatureSelectionKind.INFO_GAIN, EvaluationPhase.TEST, 0, 0.71, 0.32, 0.28, 0.2989, 0.6104,
+                    0.1183, Duration.ofSeconds(3)));
         }
         String[] fields = lines().get(1).split(",", -1);
         assertEquals(COLUMNS.size(), fields.length);
         assertEquals("SMOTE", fields[COLUMNS.indexOf("Balancing")]);
+        assertEquals("InfoGain", fields[COLUMNS.indexOf("FeatureSelection")]);
         assertEquals("test", fields[COLUMNS.indexOf("Phase")]);
         assertEquals("", fields[COLUMNS.indexOf("Folds")]);
         assertEquals("0.71", fields[COLUMNS.indexOf("Accuracy")]);
@@ -144,7 +148,7 @@ public class CsvEvaluationReportWriterTest {
         }
         List<String> lines = lines();
         assertEquals(2, lines.size());
-        assertTrue(lines.get(1).startsWith("RandomForest,None,validation,10,0.9,"));
+        assertTrue(lines.get(1).startsWith("RandomForest,None,None,validation,10,0.9,"));
     }
 
     /**
@@ -152,7 +156,7 @@ public class CsvEvaluationReportWriterTest {
      */
     private static EvaluationOutcome outcome(double accuracy, double precision, double recall,
                                              double fMeasure, double areaUnderRoc, double kappa) {
-        return new EvaluationOutcome(ClassifierKind.RANDOM_FOREST, BalancingKind.NONE,
+        return new EvaluationOutcome(ClassifierKind.RANDOM_FOREST, BalancingKind.NONE, FeatureSelectionKind.NONE,
                 EvaluationPhase.VALIDATION, 10, accuracy, precision, recall, fMeasure, areaUnderRoc, kappa,
                 Duration.ofSeconds(12));
     }

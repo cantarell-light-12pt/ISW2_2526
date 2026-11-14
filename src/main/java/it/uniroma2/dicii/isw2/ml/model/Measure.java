@@ -6,7 +6,8 @@ import lombok.Getter;
 import java.util.function.ToDoubleFunction;
 
 /**
- * The figures the balancing techniques are compared by, each read off an {@link EvaluationOutcome}.
+ * The figures the balancing techniques and the feature selections are compared by, each read off an
+ * {@link EvaluationOutcome}.
  * <p>
  * Four of them and not one, because they disagree for reasons worth knowing. Accuracy rewards a model
  * for the 77% of rows that are not buggy and is the figure balancing is least likely to improve; F1 is

@@ -6,7 +6,7 @@ import it.uniroma2.dicii.isw2.ml.DatasetSplitter;
 import it.uniroma2.dicii.isw2.ml.MlSettings;
 import it.uniroma2.dicii.isw2.ml.ModelTester;
 import it.uniroma2.dicii.isw2.ml.exception.MlException;
-import it.uniroma2.dicii.isw2.ml.impl.BestBalancing;
+import it.uniroma2.dicii.isw2.ml.impl.BestOutcome;
 import it.uniroma2.dicii.isw2.ml.impl.CsvEvaluationReportWriter;
 import it.uniroma2.dicii.isw2.ml.impl.HoldOutTester;
 import it.uniroma2.dicii.isw2.ml.impl.ReleaseDatasetSplitter;
@@ -16,7 +16,9 @@ import it.uniroma2.dicii.isw2.ml.model.ClassifierKind;
 import it.uniroma2.dicii.isw2.ml.model.DatasetSplit;
 import it.uniroma2.dicii.isw2.ml.model.EvaluationOutcome;
 import it.uniroma2.dicii.isw2.ml.model.EvaluationPhase;
+import it.uniroma2.dicii.isw2.ml.model.FeatureSelectionKind;
 import it.uniroma2.dicii.isw2.ml.model.Measure;
+import it.uniroma2.dicii.isw2.ml.model.ModelConfiguration;
 import it.uniroma2.dicii.isw2.properties.PropertiesManager;
 import lombok.extern.slf4j.Slf4j;
 import weka.core.Instances;
@@ -44,6 +46,11 @@ import java.util.Optional;
  * same as one that helps it predict a release it has not. The two halves are as lopsided as the whole —
  * the balancing is of the training half alone, inside the model, and the half it is compared over is
  * the rows as they are.
+ * <p>
+ * Every model is trained on every attribute here, whatever {@code project.ml.featureSelection} lists:
+ * the question is how to balance the rows, and a selection varying alongside would answer a different
+ * one. Which attributes to keep is what {@link FeatureSelectionStudyWorkflow} asks, under every
+ * technique this study compares.
  * <p>
  * Every measure is reported, and the best technique is named per measure rather than collapsed into a
  * single verdict. The measures disagree for reasons that matter — see {@link Measure} — and which of them
@@ -125,7 +132,8 @@ public class BalancingStudyWorkflow {
     }
 
     /**
-     * Measures every configured model under every configured technique, writing each row as it comes.
+     * Measures every configured model under every configured technique, trained on every attribute,
+     * writing each row as it comes.
      * A pairing that fails costs its own row and no more.
      *
      * @param study    the rows to train on and the rows to compare over
@@ -143,14 +151,15 @@ public class BalancingStudyWorkflow {
         List<EvaluationOutcome> outcomes = new ArrayList<>(classifiers.size() * techniques.size());
         for (ClassifierKind classifier : classifiers) {
             for (BalancingKind balancing : techniques) {
+                ModelConfiguration configuration =
+                        new ModelConfiguration(classifier, balancing, FeatureSelectionKind.NONE);
                 try {
-                    EvaluationOutcome outcome =
-                            tester.test(study.training(), study.test(), classifier, balancing);
+                    EvaluationOutcome outcome = tester.test(study.training(), study.test(), configuration);
                     report.write(outcome);
                     outcomes.add(outcome);
                 } catch (MlException e) {
-                    log.error("Unable to measure {} balanced by {}. Leaving it out of the comparison...",
-                            classifier.getLabel(), balancing.getLabel(), e);
+                    log.error("Unable to measure {}. Leaving it out of the comparison...",
+                            configuration.describe(), e);
                 }
             }
         }
@@ -202,7 +211,8 @@ public class BalancingStudyWorkflow {
         Object[] cells = new Object[Measure.values().length + 1];
         cells[0] = classifier.getLabel();
         for (Measure measure : Measure.values()) {
-            Optional<EvaluationOutcome> best = BestBalancing.of(outcomes, classifier, measure);
+            Optional<EvaluationOutcome> best =
+                    BestOutcome.of(outcomes, outcome -> outcome.classifier() == classifier, measure);
             cells[measure.ordinal() + 1] = best
                     .map(outcome -> outcome.balancing().getLabel() + " (" + score(measure.of(outcome)) + ")")
                     .orElse("");

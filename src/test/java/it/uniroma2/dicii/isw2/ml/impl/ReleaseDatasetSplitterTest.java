@@ -6,6 +6,7 @@ import it.uniroma2.dicii.isw2.ml.exception.MlException;
 import it.uniroma2.dicii.isw2.ml.model.BalancingKind;
 import it.uniroma2.dicii.isw2.ml.model.ClassifierKind;
 import it.uniroma2.dicii.isw2.ml.model.DatasetSplit;
+import it.uniroma2.dicii.isw2.ml.model.FeatureSelectionKind;
 import org.junit.Test;
 import weka.core.Instances;
 
@@ -151,7 +152,8 @@ public class ReleaseDatasetSplitterTest {
      */
     private static DatasetSplitter splitter(double trainingFraction) {
         MlSettings settings = new MlSettings(List.of(ClassifierKind.NAIVE_BAYES), List.of(BalancingKind.NONE),
-                trainingFraction, 2, 1, SyntheticInstances.BUGGY, 1, 10, 1);
+                List.of(FeatureSelectionKind.NONE), trainingFraction, 2, 1, SyntheticInstances.BUGGY, 1, 10, 1,
+                1);
         return new ReleaseDatasetSplitter(settings, FILE);
     }
 

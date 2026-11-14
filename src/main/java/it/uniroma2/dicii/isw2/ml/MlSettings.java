@@ -3,6 +3,8 @@ package it.uniroma2.dicii.isw2.ml;
 import it.uniroma2.dicii.isw2.ml.exception.MlException;
 import it.uniroma2.dicii.isw2.ml.model.BalancingKind;
 import it.uniroma2.dicii.isw2.ml.model.ClassifierKind;
+import it.uniroma2.dicii.isw2.ml.model.FeatureSelectionKind;
+import it.uniroma2.dicii.isw2.ml.model.ModelConfiguration;
 import it.uniroma2.dicii.isw2.properties.PropertiesManager;
 import lombok.extern.slf4j.Slf4j;
 
@@ -14,26 +16,32 @@ import java.util.List;
  * <p>
  * Which models are measured is one of them rather than something the code names, because the comparison
  * is meant to grow: the workflow loops over this list, so running the three classifiers instead of one
- * is an edit to the properties file and no edit at all here. How the training rows are balanced is a
- * list for the same reason, and every model is measured under every technique on it.
+ * is an edit to the properties file and no edit at all here. How the training rows are balanced, and
+ * which of their attributes a model is trained on, are lists for the same reason, and every model is
+ * measured under every pairing of a technique of the one with a technique of the other.
  *
- * @param classifiers            the models to train and measure, in the order they are reported
- * @param balancingTechniques    how the two classes of the training rows are brought to the same size,
- *                               one technique per measurement of each model, in the order they are
- *                               reported
- * @param trainingFraction       which share of the releases a model is trained on, the rest being held
- *                               back to test it on
- * @param folds                  how many folds each of them is cross-validated over
- * @param seed                   what the folds and the samples are drawn with, so that two runs agree
- * @param positiveClass          the label a per-class measure is read of, as it reads in the dataset
- * @param threads                how many threads a model that can spread itself may use
- * @param randomForestIterations how many trees a forest is grown with
- * @param ibkNeighbours          how many neighbours a nearest-neighbour classifier votes among
+ * @param classifiers                the models to train and measure, in the order they are reported
+ * @param balancingTechniques        how the two classes of the training rows are brought to the same
+ *                                   size, one technique per measurement of each model, in the order they
+ *                                   are reported
+ * @param featureSelectionTechniques which of the attributes of the training rows a model is trained on,
+ *                                   one technique per measurement of each model and balancing, in the
+ *                                   order they are reported
+ * @param trainingFraction           which share of the releases a model is trained on, the rest being
+ *                                   held back to test it on
+ * @param folds                      how many folds each of them is cross-validated over
+ * @param seed                       what the folds and the samples are drawn with, so that two runs agree
+ * @param positiveClass              the label a per-class measure is read of, as it reads in the dataset
+ * @param threads                    how many threads a model that can spread itself may use
+ * @param randomForestIterations     how many trees a forest is grown with
+ * @param ibkNeighbours              how many neighbours a nearest-neighbour classifier votes among
+ * @param infoGainAttributes         how many attributes a selection by information gain keeps
  */
 @Slf4j
 public record MlSettings(List<ClassifierKind> classifiers, List<BalancingKind> balancingTechniques,
-                         double trainingFraction, int folds, int seed, String positiveClass, int threads,
-                         int randomForestIterations, int ibkNeighbours) {
+                         List<FeatureSelectionKind> featureSelectionTechniques, double trainingFraction,
+                         int folds, int seed, String positiveClass, int threads, int randomForestIterations,
+                         int ibkNeighbours, int infoGainAttributes) {
 
     private static final String PREFIX = "project.ml.";
 
@@ -52,6 +60,13 @@ public record MlSettings(List<ClassifierKind> classifiers, List<BalancingKind> b
                     + BalancingKind.NONE.getLabel());
         }
         balancingTechniques = List.copyOf(balancingTechniques);
+        // Named for the same reason: "every attribute" is a technique, and has to be chosen as one
+        if (featureSelectionTechniques == null || featureSelectionTechniques.isEmpty()) {
+            throw new IllegalArgumentException("Which attributes a model is trained on has to be named "
+                    + "through '" + PREFIX + "featureSelection', even when the answer is "
+                    + FeatureSelectionKind.NONE.getLabel());
+        }
+        featureSelectionTechniques = List.copyOf(featureSelectionTechniques);
         // Written as what is rejected rather than as the negation of what is accepted, so that it reads
         // as the sentence below it. NaN fails every comparison, so it falls through neither test and is
         // rejected here as well
@@ -75,6 +90,29 @@ public record MlSettings(List<ClassifierKind> classifiers, List<BalancingKind> b
                     + "taken among at least one neighbour, not " + randomForestIterations + " and "
                     + ibkNeighbours);
         }
+        if (infoGainAttributes < 1) {
+            throw new IllegalArgumentException("A selection by information gain keeps at least one "
+                    + "attribute, not " + infoGainAttributes);
+        }
+    }
+
+    /**
+     * @return every model to measure, under every pairing of a balancing technique and a feature
+     * selection — the models in the order they are listed, and for each of them the techniques in the
+     * order they are, the feature selection varying fastest. That is the order they are reported in, so
+     * the rows a choice is made among sit next to each other, and a tie goes to the one listed first
+     */
+    public List<ModelConfiguration> configurations() {
+        List<ModelConfiguration> configurations = new ArrayList<>(
+                classifiers.size() * balancingTechniques.size() * featureSelectionTechniques.size());
+        for (ClassifierKind classifier : classifiers) {
+            for (BalancingKind balancing : balancingTechniques) {
+                for (FeatureSelectionKind selection : featureSelectionTechniques) {
+                    configurations.add(new ModelConfiguration(classifier, balancing, selection));
+                }
+            }
+        }
+        return configurations;
     }
 
     /**
@@ -83,8 +121,8 @@ public record MlSettings(List<ClassifierKind> classifiers, List<BalancingKind> b
      * @throws IllegalArgumentException if the share leaves no release on one of the two sides
      */
     public MlSettings withTrainingFraction(double fraction) {
-        return new MlSettings(classifiers, balancingTechniques, fraction, folds, seed, positiveClass,
-                threads, randomForestIterations, ibkNeighbours);
+        return new MlSettings(classifiers, balancingTechniques, featureSelectionTechniques, fraction, folds,
+                seed, positiveClass, threads, randomForestIterations, ibkNeighbours, infoGainAttributes);
     }
 
     /**
@@ -106,13 +144,15 @@ public record MlSettings(List<ClassifierKind> classifiers, List<BalancingKind> b
         return new MlSettings(
                 configuredClassifiers(),
                 configuredBalancing(),
+                configuredFeatureSelection(),
                 number("trainingFraction", 0.67),
                 integer("folds", 10),
                 integer("seed", 1),
                 stringify("positiveClass", "1"),
                 configuredThreads(),
                 integer("randomForest.iterations", 100),
-                integer("ibk.neighbours", 3));
+                integer("ibk.neighbours", 3),
+                integer("featureSelection.infoGainAttributes", 10));
     }
 
     /**
@@ -131,6 +171,16 @@ public record MlSettings(List<ClassifierKind> classifiers, List<BalancingKind> b
      */
     private static List<BalancingKind> configuredBalancing() throws MlException {
         return labels("balancing", BalancingKind.NONE.getLabel(), BalancingKind::from);
+    }
+
+    /**
+     * @return which of the attributes of the training rows a model is trained on, as the comma-separated
+     * list of names the property holds — every one of them when it leaves it open, which is what the
+     * selections are read against
+     * @throws MlException if one of those names belongs to no technique
+     */
+    private static List<FeatureSelectionKind> configuredFeatureSelection() throws MlException {
+        return labels("featureSelection", FeatureSelectionKind.NONE.getLabel(), FeatureSelectionKind::from);
     }
 
     /**

@@ -7,11 +7,14 @@ import it.uniroma2.dicii.isw2.ml.exception.MlException;
 import it.uniroma2.dicii.isw2.ml.model.BalancingKind;
 import it.uniroma2.dicii.isw2.ml.model.ClassifierKind;
 import it.uniroma2.dicii.isw2.ml.model.EvaluationOutcome;
+import it.uniroma2.dicii.isw2.ml.model.FeatureSelectionKind;
+import it.uniroma2.dicii.isw2.ml.model.ModelConfiguration;
 import org.junit.Before;
 import org.junit.Test;
 import weka.classifiers.rules.ZeroR;
 import weka.core.Instances;
 
+import static it.uniroma2.dicii.isw2.ml.impl.SyntheticInstances.configuration;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
@@ -22,6 +25,15 @@ import static org.junit.Assert.assertTrue;
  * the buggy class.
  */
 public class CrossValidatingEvaluatorTest {
+
+    /**
+     * The models these tests measure, trained on the rows as they are and on every attribute of them.
+     */
+    private static final ModelConfiguration IBK = configuration(ClassifierKind.IBK, BalancingKind.NONE);
+    private static final ModelConfiguration NAIVE_BAYES =
+            configuration(ClassifierKind.NAIVE_BAYES, BalancingKind.NONE);
+    private static final ModelConfiguration RANDOM_FOREST =
+            configuration(ClassifierKind.RANDOM_FOREST, BalancingKind.NONE);
 
     private static final int ROWS = 60;
 
@@ -50,7 +62,7 @@ public class CrossValidatingEvaluatorTest {
      */
     @Test
     public void testEveryMeasureIsOfAModelThatFoundTheBuggyRows() throws MlException {
-        EvaluationOutcome outcome = evaluator.evaluate(data, ClassifierKind.NAIVE_BAYES, BalancingKind.NONE);
+        EvaluationOutcome outcome = evaluator.evaluate(data, NAIVE_BAYES);
         assertTrue("The buggy class went unfound", outcome.areaUnderRoc() > 0.9);
         assertTrue(outcome.accuracy() > 0.9);
         assertTrue(outcome.precision() > 0.9);
@@ -68,9 +80,9 @@ public class CrossValidatingEvaluatorTest {
     @Test
     public void testThePerClassFiguresAreReadOffTheBuggyClass() throws MlException {
         Instances imbalanced = SyntheticInstances.imbalanced(IMBALANCED_ROWS, IMBALANCED_BUGGY_ROWS);
-        ModelFactory alwaysNotBuggy = (kind, balancing) -> new ZeroR();
+        ModelFactory alwaysNotBuggy = configuration -> new ZeroR();
         EvaluationOutcome outcome = new CrossValidatingEvaluator(alwaysNotBuggy, settings)
-                .evaluate(imbalanced, ClassifierKind.NAIVE_BAYES, BalancingKind.NONE);
+                .evaluate(imbalanced, NAIVE_BAYES);
 
         assertEquals("The recall reported is the one of the not-buggy class", 0.0, outcome.recall(), TOLERANCE);
         // F1 of a class nothing was predicted for is 2*0*0/(0+0), which is why the report writes a
@@ -97,7 +109,7 @@ public class CrossValidatingEvaluatorTest {
         MlSettings singleNeighbour = SyntheticInstances.settings(ClassifierKind.IBK, SyntheticInstances.BUGGY);
         EvaluationOutcome outcome =
                 new CrossValidatingEvaluator(new WekaClassifierFactory(singleNeighbour), singleNeighbour)
-                        .evaluate(unlearnable, ClassifierKind.IBK, BalancingKind.NONE);
+                        .evaluate(unlearnable, IBK);
 
         assertTrue("Every row was its own nearest neighbour: the model was tested on its training set",
                 outcome.accuracy() < 1.0);
@@ -106,7 +118,7 @@ public class CrossValidatingEvaluatorTest {
 
     @Test
     public void testTheOutcomeNamesTheModelAndTheFoldsItWasMeasuredOver() throws MlException {
-        EvaluationOutcome outcome = evaluator.evaluate(data, ClassifierKind.NAIVE_BAYES, BalancingKind.NONE);
+        EvaluationOutcome outcome = evaluator.evaluate(data, NAIVE_BAYES);
         assertEquals(ClassifierKind.NAIVE_BAYES, outcome.classifier());
         assertEquals(settings.folds(), outcome.folds());
     }
@@ -114,7 +126,7 @@ public class CrossValidatingEvaluatorTest {
     @Test
     public void testEveryConfiguredModelCanBeMeasured() throws MlException {
         for (ClassifierKind kind : ClassifierKind.values()) {
-            EvaluationOutcome outcome = evaluator.evaluate(data, kind, BalancingKind.NONE);
+            EvaluationOutcome outcome = evaluator.evaluate(data, configuration(kind, BalancingKind.NONE));
             assertEquals(kind, outcome.classifier());
             assertTrue("The separable rows defeated " + kind.getLabel(), outcome.accuracy() > 0.9);
         }
@@ -129,9 +141,43 @@ public class CrossValidatingEvaluatorTest {
     public void testEveryBalancingTechniqueCanBeMeasured() throws MlException {
         Instances imbalanced = SyntheticInstances.separable(IMBALANCED_ROWS, IMBALANCED_BUGGY_ROWS);
         for (BalancingKind balancing : BalancingKind.values()) {
-            EvaluationOutcome outcome = evaluator.evaluate(imbalanced, ClassifierKind.NAIVE_BAYES, balancing);
+            EvaluationOutcome outcome =
+                    evaluator.evaluate(imbalanced, configuration(ClassifierKind.NAIVE_BAYES, balancing));
             assertEquals(balancing, outcome.balancing());
             assertTrue("The separable rows defeated a model balanced by " + balancing.getLabel(),
+                    outcome.accuracy() > 0.9);
+        }
+    }
+
+    /**
+     * Every selection is made inside the folds, of the part each of them trains on, and has to keep the
+     * attribute the rows give the label away through — and the outcome has to say which selection it was
+     * measured under, since the report tells the runs apart by nothing else.
+     */
+    @Test
+    public void testEveryFeatureSelectionCanBeMeasured() throws MlException {
+        for (FeatureSelectionKind selection : FeatureSelectionKind.values()) {
+            EvaluationOutcome outcome = evaluator.evaluate(data,
+                    new ModelConfiguration(ClassifierKind.NAIVE_BAYES, BalancingKind.NONE, selection));
+            assertEquals(selection, outcome.featureSelection());
+            assertTrue("The separable rows defeated a model whose features were selected by "
+                    + selection.getLabel(), outcome.accuracy() > 0.9);
+        }
+    }
+
+    /**
+     * Selecting attributes and balancing rows are applied one around the other, and have to be able to
+     * be: SMOTE synthesises its rows over whichever attributes the selection kept.
+     */
+    @Test
+    public void testASelectionCanBeMeasuredUnderEveryBalancingTechnique() throws MlException {
+        Instances imbalanced = SyntheticInstances.separable(IMBALANCED_ROWS, IMBALANCED_BUGGY_ROWS);
+        for (BalancingKind balancing : BalancingKind.values()) {
+            EvaluationOutcome outcome = evaluator.evaluate(imbalanced, new ModelConfiguration(
+                    ClassifierKind.NAIVE_BAYES, balancing, FeatureSelectionKind.BACKWARD_SEARCH));
+            assertEquals(balancing, outcome.balancing());
+            assertEquals(FeatureSelectionKind.BACKWARD_SEARCH, outcome.featureSelection());
+            assertTrue("The separable rows defeated a selecting model balanced by " + balancing.getLabel(),
                     outcome.accuracy() > 0.9);
         }
     }
@@ -142,8 +188,8 @@ public class CrossValidatingEvaluatorTest {
      */
     @Test
     public void testTwoRunsOfTheSameModelAgree() throws MlException {
-        EvaluationOutcome first = evaluator.evaluate(data, ClassifierKind.RANDOM_FOREST, BalancingKind.NONE);
-        EvaluationOutcome second = evaluator.evaluate(data, ClassifierKind.RANDOM_FOREST, BalancingKind.NONE);
+        EvaluationOutcome first = evaluator.evaluate(data, RANDOM_FOREST);
+        EvaluationOutcome second = evaluator.evaluate(data, RANDOM_FOREST);
         assertEquals(first.accuracy(), second.accuracy(), TOLERANCE);
         assertEquals(first.precision(), second.precision(), TOLERANCE);
         assertEquals(first.recall(), second.recall(), TOLERANCE);
@@ -159,7 +205,7 @@ public class CrossValidatingEvaluatorTest {
     @Test
     public void testTheInstancesItWasGivenAreLeftAsTheyWere() throws MlException {
         Instances before = new Instances(data);
-        evaluator.evaluate(data, ClassifierKind.NAIVE_BAYES, BalancingKind.NONE);
+        evaluator.evaluate(data, NAIVE_BAYES);
         assertEquals(before.numInstances(), data.numInstances());
         for (int i = 0; i < before.numInstances(); i++) {
             assertEquals(before.instance(i).toString(), data.instance(i).toString());
@@ -177,7 +223,7 @@ public class CrossValidatingEvaluatorTest {
                 new CrossValidatingEvaluator(new WekaClassifierFactory(misconfigured), misconfigured);
         MlException thrown =
                 assertThrows(MlException.class,
-                        () -> misreading.evaluate(data, ClassifierKind.NAIVE_BAYES, BalancingKind.NONE));
+                        () -> misreading.evaluate(data, NAIVE_BAYES));
         assertTrue(thrown.getMessage().contains("yes"));
     }
 

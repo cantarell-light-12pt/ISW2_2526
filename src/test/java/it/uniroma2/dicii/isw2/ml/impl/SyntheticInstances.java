@@ -3,6 +3,8 @@ package it.uniroma2.dicii.isw2.ml.impl;
 import it.uniroma2.dicii.isw2.ml.MlSettings;
 import it.uniroma2.dicii.isw2.ml.model.BalancingKind;
 import it.uniroma2.dicii.isw2.ml.model.ClassifierKind;
+import it.uniroma2.dicii.isw2.ml.model.FeatureSelectionKind;
+import it.uniroma2.dicii.isw2.ml.model.ModelConfiguration;
 import weka.core.Attribute;
 import weka.core.DenseInstance;
 import weka.core.Instances;
@@ -223,10 +225,21 @@ final class SyntheticInstances {
      * @param classifier    the model to measure
      * @param positiveClass the class the per-class figures are read of
      * @param balancing     how the training rows are brought to the same size
-     * @return settings a test can run under
+     * @return settings a test can run under, keeping every attribute and, when asked to select them by
+     * information gain, the single best one — which the signal is, of the rows built here
      */
     static MlSettings settings(ClassifierKind classifier, String positiveClass, BalancingKind balancing) {
-        return new MlSettings(List.of(classifier), List.of(balancing), 0.67, 2, 1, positiveClass, 1, 10, 1);
+        return new MlSettings(List.of(classifier), List.of(balancing), List.of(FeatureSelectionKind.NONE),
+                0.67, 2, 1, positiveClass, 1, 10, 1, 1);
+    }
+
+    /**
+     * @param classifier the model to measure
+     * @param balancing  how the rows it is trained on are brought to the same size
+     * @return it, trained on every attribute
+     */
+    static ModelConfiguration configuration(ClassifierKind classifier, BalancingKind balancing) {
+        return new ModelConfiguration(classifier, balancing, FeatureSelectionKind.NONE);
     }
 
 }
