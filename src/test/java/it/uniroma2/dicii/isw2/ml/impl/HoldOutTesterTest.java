@@ -7,10 +7,13 @@ import it.uniroma2.dicii.isw2.ml.model.BalancingKind;
 import it.uniroma2.dicii.isw2.ml.model.ClassifierKind;
 import it.uniroma2.dicii.isw2.ml.model.EvaluationOutcome;
 import it.uniroma2.dicii.isw2.ml.model.EvaluationPhase;
+import it.uniroma2.dicii.isw2.ml.model.FeatureSelectionKind;
+import it.uniroma2.dicii.isw2.ml.model.ModelConfiguration;
 import org.junit.Before;
 import org.junit.Test;
 import weka.core.Instances;
 
+import static it.uniroma2.dicii.isw2.ml.impl.SyntheticInstances.configuration;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertThrows;
@@ -21,6 +24,13 @@ import static org.junit.Assert.assertTrue;
  * the outcome says so.
  */
 public class HoldOutTesterTest {
+
+    /**
+     * The models these tests measure, trained on the rows as they are and on every attribute of them.
+     */
+    private static final ModelConfiguration IBK = configuration(ClassifierKind.IBK, BalancingKind.NONE);
+    private static final ModelConfiguration NAIVE_BAYES =
+            configuration(ClassifierKind.NAIVE_BAYES, BalancingKind.NONE);
 
     private static final int TRAINING_ROWS = 60;
     private static final int TEST_ROWS = 40;
@@ -41,7 +51,7 @@ public class HoldOutTesterTest {
     @Test
     public void testAModelTrainedOnOneSetPredictsTheOther() throws MlException {
         EvaluationOutcome outcome = tester.test(SyntheticInstances.separable(TRAINING_ROWS),
-                SyntheticInstances.separable(TEST_ROWS), ClassifierKind.NAIVE_BAYES, BalancingKind.NONE);
+                SyntheticInstances.separable(TEST_ROWS), NAIVE_BAYES);
 
         assertTrue("The buggy class went unfound in the held-out rows", outcome.areaUnderRoc() > 0.9);
         assertTrue(outcome.accuracy() > 0.9);
@@ -58,7 +68,7 @@ public class HoldOutTesterTest {
     @Test
     public void testTheOutcomeIsMarkedAsTheTestPhaseAndCutsNoFolds() throws MlException {
         EvaluationOutcome outcome = tester.test(SyntheticInstances.separable(TRAINING_ROWS),
-                SyntheticInstances.separable(TEST_ROWS), ClassifierKind.NAIVE_BAYES, BalancingKind.NONE);
+                SyntheticInstances.separable(TEST_ROWS), NAIVE_BAYES);
         assertEquals(EvaluationPhase.TEST, outcome.phase());
         assertEquals(0, outcome.folds());
         assertEquals(ClassifierKind.NAIVE_BAYES, outcome.classifier());
@@ -76,7 +86,7 @@ public class HoldOutTesterTest {
                 SyntheticInstances.settings(ClassifierKind.IBK, SyntheticInstances.BUGGY);
         EvaluationOutcome outcome =
                 new HoldOutTester(new WekaClassifierFactory(singleNeighbour), singleNeighbour)
-                        .test(training, unlearnable, ClassifierKind.IBK, BalancingKind.NONE);
+                        .test(training, unlearnable, IBK);
 
         assertNotEquals("The model was measured on the rows it was trained on", 1.0,
                 outcome.accuracy(), 1e-9);
@@ -93,7 +103,7 @@ public class HoldOutTesterTest {
         Instances different = SyntheticInstances.separable(TEST_ROWS);
         different.deleteAttributeAt(0);
         assertThrows(MlException.class,
-                () -> tester.test(training, different, ClassifierKind.NAIVE_BAYES, BalancingKind.NONE));
+                () -> tester.test(training, different, NAIVE_BAYES));
     }
 
     /**
@@ -106,10 +116,27 @@ public class HoldOutTesterTest {
         for (BalancingKind balancing : BalancingKind.values()) {
             EvaluationOutcome outcome = tester.test(
                     SyntheticInstances.separable(TRAINING_ROWS, TRAINING_ROWS / 5),
-                    SyntheticInstances.separable(TEST_ROWS), ClassifierKind.NAIVE_BAYES, balancing);
+                    SyntheticInstances.separable(TEST_ROWS),
+                    configuration(ClassifierKind.NAIVE_BAYES, balancing));
             assertEquals(balancing, outcome.balancing());
             assertTrue("The separable rows defeated a model balanced by " + balancing.getLabel(),
                     outcome.accuracy() > 0.9);
+        }
+    }
+
+    /**
+     * The attributes are chosen out of the training rows and the test rows are reduced to them, so
+     * whatever was kept, a model has to find what the rows give away in releases it was not trained on.
+     */
+    @Test
+    public void testEveryFeatureSelectionCanBeTested() throws MlException {
+        for (FeatureSelectionKind selection : FeatureSelectionKind.values()) {
+            EvaluationOutcome outcome = tester.test(SyntheticInstances.separable(TRAINING_ROWS),
+                    SyntheticInstances.separable(TEST_ROWS),
+                    new ModelConfiguration(ClassifierKind.NAIVE_BAYES, BalancingKind.NONE, selection));
+            assertEquals(selection, outcome.featureSelection());
+            assertTrue("The separable rows defeated a model whose features were selected by "
+                    + selection.getLabel(), outcome.accuracy() > 0.9);
         }
     }
 
@@ -123,7 +150,7 @@ public class HoldOutTesterTest {
         ModelTester selecting = new HoldOutTester(new WekaClassifierFactory(settings), settings,
                 EvaluationPhase.SELECTION);
         EvaluationOutcome outcome = selecting.test(SyntheticInstances.separable(TRAINING_ROWS),
-                SyntheticInstances.separable(TEST_ROWS), ClassifierKind.NAIVE_BAYES, BalancingKind.NONE);
+                SyntheticInstances.separable(TEST_ROWS), NAIVE_BAYES);
         assertEquals(EvaluationPhase.SELECTION, outcome.phase());
         assertEquals(0, outcome.folds());
     }
@@ -132,7 +159,7 @@ public class HoldOutTesterTest {
     public void testEveryConfiguredModelCanBeTested() throws MlException {
         for (ClassifierKind kind : ClassifierKind.values()) {
             EvaluationOutcome outcome = tester.test(SyntheticInstances.separable(TRAINING_ROWS),
-                    SyntheticInstances.separable(TEST_ROWS), kind, BalancingKind.NONE);
+                    SyntheticInstances.separable(TEST_ROWS), configuration(kind, BalancingKind.NONE));
             assertEquals(kind, outcome.classifier());
             assertTrue("The separable rows defeated " + kind.getLabel(), outcome.accuracy() > 0.9);
         }

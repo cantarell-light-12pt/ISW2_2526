@@ -3,6 +3,8 @@ package it.uniroma2.dicii.isw2.ml;
 import it.uniroma2.dicii.isw2.ml.exception.MlException;
 import it.uniroma2.dicii.isw2.ml.model.BalancingKind;
 import it.uniroma2.dicii.isw2.ml.model.ClassifierKind;
+import it.uniroma2.dicii.isw2.ml.model.FeatureSelectionKind;
+import it.uniroma2.dicii.isw2.ml.model.ModelConfiguration;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -35,6 +37,11 @@ public class MlSettingsTest {
      * The rows as they are, which is what every case but the ones asserting on it wants.
      */
     private static final List<BalancingKind> BALANCING = List.of(BalancingKind.NONE);
+
+    /**
+     * Every attribute, which is what every case but the ones asserting on it wants.
+     */
+    private static final List<FeatureSelectionKind> SELECTION = List.of(FeatureSelectionKind.NONE);
 
     /**
      * The validation the project is required to report on is a ten-fold one, so the number is asserted
@@ -80,7 +87,7 @@ public class MlSettingsTest {
     @Test
     public void testAValidationOfFewerThanTwoFoldsIsRefused() {
         assertThrows(IllegalArgumentException.class,
-                () -> new MlSettings(MODELS, BALANCING, FRACTION, 1, 1, BUGGY, 1, 100, 3));
+                () -> new MlSettings(MODELS, BALANCING, SELECTION, FRACTION, 1, 1, BUGGY, 1, 100, 3, 10));
     }
 
     /**
@@ -91,14 +98,14 @@ public class MlSettingsTest {
     @Test
     public void testAnUnnamedBalancingTechniqueIsRefused() {
         assertThrows(IllegalArgumentException.class,
-                () -> new MlSettings(MODELS, null, FRACTION, 10, 1, BUGGY, 1, 100, 3));
+                () -> new MlSettings(MODELS, null, SELECTION, FRACTION, 10, 1, BUGGY, 1, 100, 3, 10));
     }
 
     @Test
     public void testAnEmptyListOfBalancingTechniquesIsRefused() {
         List<BalancingKind> none = List.of();
         assertThrows(IllegalArgumentException.class,
-                () -> new MlSettings(MODELS, none, FRACTION, 10, 1, BUGGY, 1, 100, 3));
+                () -> new MlSettings(MODELS, none, SELECTION, FRACTION, 10, 1, BUGGY, 1, 100, 3, 10));
     }
 
     /**
@@ -118,7 +125,7 @@ public class MlSettingsTest {
     @Test
     public void testTheBalancingTechniquesCannotBeWrittenIntoBehindTheSettings() {
         List<BalancingKind> techniques = new ArrayList<>(List.of(BalancingKind.NONE));
-        MlSettings settings = new MlSettings(MODELS, techniques, FRACTION, 10, 1, BUGGY, 1, 100, 3);
+        MlSettings settings = new MlSettings(MODELS, techniques, SELECTION, FRACTION, 10, 1, BUGGY, 1, 100, 3, 10);
         techniques.add(BalancingKind.SMOTE);
         assertEquals(List.of(BalancingKind.NONE), settings.balancingTechniques());
     }
@@ -132,9 +139,77 @@ public class MlSettingsTest {
         MlSettings settings = settings(List.of(ClassifierKind.IBK, ClassifierKind.NAIVE_BAYES));
         MlSettings moved = settings.withTrainingFraction(0.5);
         assertEquals(0.5, moved.trainingFraction(), 0.0);
-        assertEquals(new MlSettings(settings.classifiers(), settings.balancingTechniques(), 0.5,
-                settings.folds(), settings.seed(), settings.positiveClass(), settings.threads(),
-                settings.randomForestIterations(), settings.ibkNeighbours()), moved);
+        assertEquals(new MlSettings(settings.classifiers(), settings.balancingTechniques(),
+                settings.featureSelectionTechniques(), 0.5, settings.folds(), settings.seed(),
+                settings.positiveClass(), settings.threads(), settings.randomForestIterations(),
+                settings.ibkNeighbours(), settings.infoGainAttributes()), moved);
+    }
+
+    /**
+     * "Every attribute" is a selection like the other three, and has to be named as one for the reason
+     * leaving the rows unbalanced does.
+     */
+    @Test
+    public void testAnUnnamedFeatureSelectionIsRefused() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new MlSettings(MODELS, BALANCING, null, FRACTION, 10, 1, BUGGY, 1, 100, 3, 10));
+        List<FeatureSelectionKind> none = List.of();
+        assertThrows(IllegalArgumentException.class,
+                () -> new MlSettings(MODELS, BALANCING, none, FRACTION, 10, 1, BUGGY, 1, 100, 3, 10));
+    }
+
+    /**
+     * The comparison the project reports is of every attribute against the three selections, in that
+     * order, so the list is asserted rather than merely read.
+     */
+    @Test
+    public void testTheConfiguredFeatureSelectionsAreReadInOrder() throws MlException {
+        assertEquals(List.of(FeatureSelectionKind.NONE, FeatureSelectionKind.INFO_GAIN,
+                        FeatureSelectionKind.FORWARD_SEARCH, FeatureSelectionKind.BACKWARD_SEARCH),
+                MlSettings.load().featureSelectionTechniques());
+    }
+
+    @Test
+    public void testTheFeatureSelectionsCannotBeWrittenIntoBehindTheSettings() {
+        List<FeatureSelectionKind> techniques = new ArrayList<>(SELECTION);
+        MlSettings settings = new MlSettings(MODELS, BALANCING, techniques, FRACTION, 10, 1, BUGGY, 1, 100, 3,
+                10);
+        techniques.add(FeatureSelectionKind.INFO_GAIN);
+        assertEquals(SELECTION, settings.featureSelectionTechniques());
+    }
+
+    @Test
+    public void testASelectionByInformationGainKeepingNothingIsRefused() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new MlSettings(MODELS, BALANCING, SELECTION, FRACTION, 10, 1, BUGGY, 1, 100, 3, 0));
+    }
+
+    @Test
+    public void testTheConfiguredSelectionByInformationGainKeepsSomething() throws MlException {
+        assertTrue(MlSettings.load().infoGainAttributes() >= 1);
+    }
+
+    /**
+     * Every model is measured under every pairing of the two kinds of technique, in the order the lists
+     * are written, the selection varying fastest: that is the order the rows are reported in, and a tie
+     * between two of them goes to the one listed first.
+     */
+    @Test
+    public void testEveryModelIsConfiguredUnderEveryPairingOfTechniques() {
+        MlSettings settings = new MlSettings(List.of(ClassifierKind.IBK, ClassifierKind.NAIVE_BAYES),
+                List.of(BalancingKind.NONE, BalancingKind.SMOTE),
+                List.of(FeatureSelectionKind.NONE, FeatureSelectionKind.INFO_GAIN), FRACTION, 10, 1, BUGGY, 1,
+                100, 3, 10);
+        List<ModelConfiguration> configurations = settings.configurations();
+        assertEquals(8, configurations.size());
+        assertEquals(new ModelConfiguration(ClassifierKind.IBK, BalancingKind.NONE, FeatureSelectionKind.NONE),
+                configurations.getFirst());
+        assertEquals(new ModelConfiguration(ClassifierKind.IBK, BalancingKind.NONE,
+                FeatureSelectionKind.INFO_GAIN), configurations.get(1));
+        assertEquals(new ModelConfiguration(ClassifierKind.IBK, BalancingKind.SMOTE, FeatureSelectionKind.NONE),
+                configurations.get(2));
+        assertEquals(new ModelConfiguration(ClassifierKind.NAIVE_BAYES, BalancingKind.SMOTE,
+                FeatureSelectionKind.INFO_GAIN), configurations.getLast());
     }
 
     @Test
@@ -163,7 +238,7 @@ public class MlSettingsTest {
         for (double fraction : new double[] {0.0, 1.0, -0.1, 1.5, Double.NaN}) {
             assertThrows("A training fraction of " + fraction + " was accepted",
                     IllegalArgumentException.class,
-                    () -> new MlSettings(MODELS, BALANCING, fraction, 10, 1, BUGGY, 1, 100, 3));
+                    () -> new MlSettings(MODELS, BALANCING, SELECTION, fraction, 10, 1, BUGGY, 1, 100, 3, 10));
         }
     }
 
@@ -177,17 +252,17 @@ public class MlSettingsTest {
     @Test
     public void testAnUnnamedBuggyClassIsRefused() {
         assertThrows(IllegalArgumentException.class,
-                () -> new MlSettings(MODELS, BALANCING, FRACTION, 10, 1, " ", 1, 100, 3));
+                () -> new MlSettings(MODELS, BALANCING, SELECTION, FRACTION, 10, 1, " ", 1, 100, 3, 10));
     }
 
     @Test
     public void testAModelBuiltOutOfNothingIsRefused() {
         assertThrows(IllegalArgumentException.class,
-                () -> new MlSettings(MODELS, BALANCING, FRACTION, 10, 1, BUGGY, 1, 0, 3));
+                () -> new MlSettings(MODELS, BALANCING, SELECTION, FRACTION, 10, 1, BUGGY, 1, 0, 3, 10));
         assertThrows(IllegalArgumentException.class,
-                () -> new MlSettings(MODELS, BALANCING, FRACTION, 10, 1, BUGGY, 1, 100, 0));
+                () -> new MlSettings(MODELS, BALANCING, SELECTION, FRACTION, 10, 1, BUGGY, 1, 100, 0, 10));
         assertThrows(IllegalArgumentException.class,
-                () -> new MlSettings(MODELS, BALANCING, FRACTION, 10, 1, BUGGY, 0, 100, 3));
+                () -> new MlSettings(MODELS, BALANCING, SELECTION, FRACTION, 10, 1, BUGGY, 0, 100, 3, 10));
     }
 
     /**
@@ -213,7 +288,7 @@ public class MlSettingsTest {
      * @return settings holding them, everything else left at something workable
      */
     private static MlSettings settings(List<ClassifierKind> classifiers) {
-        return new MlSettings(classifiers, BALANCING, FRACTION, 10, 1, BUGGY, 1, 100, 3);
+        return new MlSettings(classifiers, BALANCING, SELECTION, FRACTION, 10, 1, BUGGY, 1, 100, 3, 10);
     }
 
 }

@@ -1,9 +1,8 @@
 package it.uniroma2.dicii.isw2.ml;
 
 import it.uniroma2.dicii.isw2.ml.exception.MlException;
-import it.uniroma2.dicii.isw2.ml.model.BalancingKind;
-import it.uniroma2.dicii.isw2.ml.model.ClassifierKind;
 import it.uniroma2.dicii.isw2.ml.model.EvaluationOutcome;
+import it.uniroma2.dicii.isw2.ml.model.ModelConfiguration;
 import weka.core.Instances;
 
 /**
@@ -11,24 +10,22 @@ import weka.core.Instances;
  * on.
  * <p>
  * Neither of the two things that vary is fixed by this interface, which is the point of its shape: the
- * model is named by a {@link ClassifierKind} rather than built here, and the dataset arrives as
- * {@code Instances} rather than as the path they were read from — so a dataset a feature selection has
- * reduced is measured through the very same call as the one the extraction workflow wrote. How the rows
- * a model is trained on are balanced is named the same way, by a {@link BalancingKind}, and it is the
- * implementation's to make sure that only those rows are.
+ * model is named by a {@link ModelConfiguration} rather than built here, and the dataset arrives as
+ * {@code Instances} rather than as the path they were read from. How the rows a model is trained on are
+ * balanced, and which of their attributes it is trained on, are named by the configuration as well, and
+ * it is the implementation's to make sure that only those rows are balanced and selected over.
  */
 public interface ModelEvaluator {
 
     /**
      * Measures one model over the given rows.
      *
-     * @param data       the rows to train and test on, labelled, with their class attribute set
-     * @param classifier which model to train
-     * @param balancing  how to balance the rows it is trained on, leaving the ones it is tested on alone
+     * @param data          the rows to train and test on, labelled, with their class attribute set
+     * @param configuration which model to train, how to balance the rows it is trained on and which of
+     *                      their attributes to keep, leaving the rows it is tested on alone
      * @return how it scored
      * @throws MlException if the model cannot be trained or measured
      */
-    EvaluationOutcome evaluate(Instances data, ClassifierKind classifier, BalancingKind balancing)
-            throws MlException;
+    EvaluationOutcome evaluate(Instances data, ModelConfiguration configuration) throws MlException;
 
 }

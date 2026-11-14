@@ -4,10 +4,9 @@ import it.uniroma2.dicii.isw2.ml.MlSettings;
 import it.uniroma2.dicii.isw2.ml.ModelEvaluator;
 import it.uniroma2.dicii.isw2.ml.ModelFactory;
 import it.uniroma2.dicii.isw2.ml.exception.MlException;
-import it.uniroma2.dicii.isw2.ml.model.BalancingKind;
-import it.uniroma2.dicii.isw2.ml.model.ClassifierKind;
 import it.uniroma2.dicii.isw2.ml.model.EvaluationOutcome;
 import it.uniroma2.dicii.isw2.ml.model.EvaluationPhase;
+import it.uniroma2.dicii.isw2.ml.model.ModelConfiguration;
 import lombok.extern.slf4j.Slf4j;
 import weka.classifiers.Evaluation;
 import weka.core.Instances;
@@ -34,6 +33,9 @@ import java.util.Random;
  * Balancing happens inside every fold and of its training part alone, without anything here asking for
  * it: the model the factory builds balances whatever it is trained on, and each fold trains a copy of it
  * on its nine tenths. The tenth it is measured on is the rows as they are, as a test set has to be.
+ * The feature selection is placed the same way and for the same reason: each fold chooses the
+ * attributes out of its nine tenths, so the ten folds may well keep ten different subsets, and none of
+ * them was chosen with the tenth it is measured on in hand.
  */
 @Slf4j
 public class CrossValidatingEvaluator implements ModelEvaluator {
@@ -47,21 +49,21 @@ public class CrossValidatingEvaluator implements ModelEvaluator {
     }
 
     @Override
-    public EvaluationOutcome evaluate(Instances data, ClassifierKind classifier, BalancingKind balancing)
+    public EvaluationOutcome evaluate(Instances data, ModelConfiguration configuration)
             throws MlException {
         int folds = settings.folds();
         int positiveClassIndex = EvaluationOutcomes.positiveClassIndex(data, settings.positiveClass());
         // Its own copy: the validation shuffles what it is given, and the rows belong to the caller
         Instances working = new Instances(data);
         Instant start = Instant.now();
-        log.info("Validating {} balanced by {} over {} folds of {} training rows", classifier.getLabel(),
-                balancing.getLabel(), folds, working.numInstances());
-        Evaluation evaluation = crossValidate(working, classifier, balancing, folds);
-        EvaluationOutcome outcome = EvaluationOutcomes.from(evaluation, classifier, balancing,
+        log.info("Validating {} over {} folds of {} training rows", configuration.describe(), folds,
+                working.numInstances());
+        Evaluation evaluation = crossValidate(working, configuration, folds);
+        EvaluationOutcome outcome = EvaluationOutcomes.from(evaluation, configuration,
                 EvaluationPhase.VALIDATION, folds, positiveClassIndex,
                 Duration.between(start, Instant.now()));
-        log.info("{} balanced by {} validated at accuracy {} and AUC {} on the buggy class in {}s",
-                classifier.getLabel(), balancing.getLabel(), EvaluationOutcomes.rounded(outcome.accuracy()),
+        log.info("{} validated at accuracy {} and AUC {} on the buggy class in {}s",
+                configuration.describe(), EvaluationOutcomes.rounded(outcome.accuracy()),
                 EvaluationOutcomes.rounded(outcome.areaUnderRoc()), outcome.elapsed().toSeconds());
         return outcome;
     }
@@ -69,25 +71,25 @@ public class CrossValidatingEvaluator implements ModelEvaluator {
     /**
      * Runs the validation itself.
      *
-     * @param working    the rows to validate over, which this shuffles
-     * @param classifier which model to train, named in the report of a failure
-     * @param balancing  how to balance the training part of each fold
-     * @param folds      how many folds to cut
+     * @param working       the rows to validate over, which this shuffles
+     * @param configuration which model to train, how to balance the training part of each fold and
+     *                      which of its attributes to keep
+     * @param folds         how many folds to cut
      * @return the predictions of every fold, accumulated
      * @throws MlException if the model cannot be trained or tested
      */
-    private Evaluation crossValidate(Instances working, ClassifierKind classifier,
-                                     BalancingKind balancing, int folds) throws MlException {
+    private Evaluation crossValidate(Instances working, ModelConfiguration configuration, int folds)
+            throws MlException {
         try {
             Evaluation evaluation = new Evaluation(working);
-            evaluation.crossValidateModel(factory.build(classifier, balancing), working, folds,
+            evaluation.crossValidateModel(factory.build(configuration), working, folds,
                     new Random(settings.seed()));
             return evaluation;
         } catch (Exception e) {
             // Weka reports everything from an unbuildable classifier to a fold holding a single class
             // as a bare Exception, which leaves nothing more specific to catch
-            throw new MlException("Unable to validate " + classifier.getLabel() + " balanced by "
-                    + balancing.getLabel() + " over " + folds + " folds", e);
+            throw new MlException("Unable to validate " + configuration.describe() + " over " + folds
+                    + " folds", e);
         }
     }
 

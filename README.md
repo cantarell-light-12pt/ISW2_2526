@@ -29,14 +29,14 @@ These metrics aim to quantify the complexity of a class from an object-oriented 
 
 ### Evolution metrics
 These metrics quantify the evolution of a class over releases.
-- **Churn** (CH): the number of lines of coded added and removed from the previous release.
+- **Churn** (CH): the number of lines of code added and removed from the previous release.
 - **Max Churn** (MCH): the maximum number of lines of code added and removed in a single release.
-- **Change in Size** (CIS): the number of lines of code added or removed in the class over time.
+- **Change in Size** (CIS): the lines added to the class minus the lines removed from it, summed over every non-merge commit reachable from the current release's tag, following the class across renames. It can be negative.
 - **Number of Revisions** (NR): the number of commits the class has been subjected to along revisions.
 - **Number of Distinct Authors** (NDA): the number of distinct authors that have contributed to the class over releases.
 - **Age** (AGE): number of releases the class has been in the project.
 - **Number of Latest Bug Fixes** (NLBF): the number of commits that fixed a bug in the class since the last release.
-- **Weighted Number of Bug Fixes** (WNBF): the number of commits that fixed a bug in the class over released, divided by the class age.
+- **Weighted Number of Bug Fixes** (WNBF): the number of commits that fixed a bug in the class over releases, divided by the class age.
 
 ### Smells metrics
 These metrics quantity the number of code smells detected in a class, according to their severity as described by PMD ([reference](https://pmd.github.io/pmd/pmd_rules_java.html)).

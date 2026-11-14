@@ -17,7 +17,7 @@ import java.util.StringJoiner;
 
 /**
  * Writes what each model scored, as a comma-separated file holding one row per model, balancing
- * technique and phase.
+ * technique, feature selection and phase.
  * <p>
  * A row is flushed as soon as its model is done, for the same reason the dataset's own writer flushes a
  * release as soon as it has been measured: a model already measured is worth keeping when a later one
@@ -40,7 +40,8 @@ public class CsvEvaluationReportWriter implements AutoCloseable {
      */
     private static final int SCALE = 4;
 
-    private static final List<String> COLUMNS = List.of("Classifier", "Balancing", "Phase", "Folds",
+    private static final List<String> COLUMNS = List.of("Classifier", "Balancing", "FeatureSelection",
+            "Phase", "Folds",
             "Accuracy", "Precision", "Recall", "F1", "AUC", "Kappa", "ElapsedSeconds");
 
     private final Path file;
@@ -94,6 +95,7 @@ public class CsvEvaluationReportWriter implements AutoCloseable {
         StringJoiner row = recordLine();
         row.add(escape(outcome.classifier().getLabel()));
         row.add(escape(outcome.balancing().getLabel()));
+        row.add(escape(outcome.featureSelection().getLabel()));
         row.add(escape(outcome.phase().getLabel()));
         // Blank rather than zero for the inference phase, which cuts no folds: a zero there would read
         // as a validation over no folds, which is a different thing from not having been one
