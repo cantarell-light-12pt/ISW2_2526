@@ -2,7 +2,9 @@ package it.uniroma2.dicii.isw2;
 
 import it.uniroma2.dicii.isw2.dataset.exception.DatasetException;
 import it.uniroma2.dicii.isw2.dataset.impl.WekaCsvDatasetReader;
+import it.uniroma2.dicii.isw2.dataset.impl.WekaCsvDatasetSaver;
 import it.uniroma2.dicii.isw2.ml.DatasetSplitter;
+import it.uniroma2.dicii.isw2.ml.DatasetTrimmer;
 import it.uniroma2.dicii.isw2.ml.MlSettings;
 import it.uniroma2.dicii.isw2.ml.ModelEvaluator;
 import it.uniroma2.dicii.isw2.ml.ModelTester;
@@ -11,6 +13,7 @@ import it.uniroma2.dicii.isw2.ml.impl.CrossValidatingEvaluator;
 import it.uniroma2.dicii.isw2.ml.impl.CsvEvaluationReportWriter;
 import it.uniroma2.dicii.isw2.ml.impl.HoldOutTester;
 import it.uniroma2.dicii.isw2.ml.impl.ReleaseDatasetSplitter;
+import it.uniroma2.dicii.isw2.ml.impl.ReleaseDatasetTrimmer;
 import it.uniroma2.dicii.isw2.ml.impl.WekaClassifierFactory;
 import it.uniroma2.dicii.isw2.ml.model.DatasetSplit;
 import it.uniroma2.dicii.isw2.ml.model.EvaluationOutcome;
@@ -28,12 +31,19 @@ import java.util.Locale;
  * Trains a model on the dataset the extraction workflow builds and reports how well it predicts which
  * classes are faulty.
  * <p>
- * It reads the <b>trimmed</b> dataset rather than the whole one. The buggy label of a release is only
- * as good as the defects reported against it, and the last releases of a project have had the least
- * time to have any reported. Learning from the tail would be learning that the recent releases are
- * clean, which is a fact about the calendar and not about the code — the snoring effect.
+ * It reads the <b>whole</b> dataset and trims it itself to the earliest {@code project.ml.trimFraction}
+ * of the releases, which is what the models are studied on. The buggy label of a release is only as
+ * good as the defects reported against it, and the last releases of a project have had the least time to
+ * have any reported. Learning from the tail would be learning that the recent releases are clean, which
+ * is a fact about the calendar and not about the code — the snoring effect. The trimmed dataset is
+ * written beside the whole one, as {@code <project>-trimmed.csv}, for the studies choosing a balancing
+ * technique and a feature selection to read, and for a reader to inspect.
  * <p>
- * The run has three phases, in this (necessary) order:
+ * The dataset is read as Weka needs it: the label is the nominal class, its buggy value read off how it
+ * is written ({@code 1}) and never off its position, and the columns naming each row are kept only until
+ * the split, which reads the release off them and drops them from both halves.
+ * <p>
+ * The run has three phases after the trim, in this (necessary) order:
  * <ol>
  * <li><b>split</b> — the releases are cut into the earliest {@code project.ml.trainingFraction} of them
  * and the rest. Cut at a <i>release</i>, not at a row, so that every training row is older than every
@@ -70,7 +80,8 @@ import java.util.Locale;
 @Slf4j
 public class MlWorkflow {
 
-    private static final String DATASET_SUFFIX = "-trimmed.csv";
+    private static final String DATASET_SUFFIX = ".csv";
+    private static final String TRIMMED_SUFFIX = "-trimmed.csv";
     private static final String REPORT_SUFFIX = "-evaluation.csv";
 
     /**
@@ -93,10 +104,15 @@ public class MlWorkflow {
         try {
             MlSettings settings = MlSettings.load();
             Path file = datasetDirectory.resolve(projectName + DATASET_SUFFIX);
-            // Read with the columns naming each row still on it: the split is cut on the release a row
-            // belongs to, and the splitter drops them from each half on its way out
-            Instances data = new WekaCsvDatasetReader().readRetainingIdentity(file);
-            DatasetSplitter splitter = new ReleaseDatasetSplitter(settings, file);
+            // Read with the columns naming each row still on it: both the trim and the split are cut on
+            // the release a row belongs to, and the splitter drops them from each half on its way out
+            Instances whole = new WekaCsvDatasetReader().readRetainingIdentity(file);
+            DatasetTrimmer trimmer = new ReleaseDatasetTrimmer(MlSettings.trimFraction(),
+                    settings.positiveClass(), file);
+            Instances data = trimmer.trim(whole);
+            Path trimmedFile = datasetDirectory.resolve(projectName + TRIMMED_SUFFIX);
+            new WekaCsvDatasetSaver().save(data, trimmedFile);
+            DatasetSplitter splitter = new ReleaseDatasetSplitter(settings, trimmedFile);
             DatasetSplit split = splitter.split(data);
             log.info("Training on {} rows of {} releases, testing on {} rows of {}",
                     split.training().numInstances(), split.trainingReleases().size(),
@@ -110,7 +126,7 @@ public class MlWorkflow {
             summarise(outcomes, settings.folds());
             log.info("Models evaluated successfully!");
         } catch (DatasetException e) {
-            log.error("Error reading the dataset the models are trained on", e);
+            log.error("Error reading the dataset the models are trained on, or writing its trimmed part", e);
         } catch (MlException e) {
             log.error("Error evaluating the models", e);
         }

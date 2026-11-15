@@ -6,19 +6,8 @@ import it.uniroma2.dicii.isw2.ml.FeatureSelector;
 import it.uniroma2.dicii.isw2.ml.MlSettings;
 import it.uniroma2.dicii.isw2.ml.ModelEvaluator;
 import it.uniroma2.dicii.isw2.ml.exception.MlException;
-import it.uniroma2.dicii.isw2.ml.impl.BestOutcome;
-import it.uniroma2.dicii.isw2.ml.impl.CrossValidatingEvaluator;
-import it.uniroma2.dicii.isw2.ml.impl.CsvEvaluationReportWriter;
-import it.uniroma2.dicii.isw2.ml.impl.ReleaseDatasetSplitter;
-import it.uniroma2.dicii.isw2.ml.impl.WekaClassifierFactory;
-import it.uniroma2.dicii.isw2.ml.impl.WekaFeatureSelector;
-import it.uniroma2.dicii.isw2.ml.model.BalancingKind;
-import it.uniroma2.dicii.isw2.ml.model.ClassifierKind;
-import it.uniroma2.dicii.isw2.ml.model.DatasetSplit;
-import it.uniroma2.dicii.isw2.ml.model.EvaluationOutcome;
-import it.uniroma2.dicii.isw2.ml.model.FeatureSelectionKind;
-import it.uniroma2.dicii.isw2.ml.model.Measure;
-import it.uniroma2.dicii.isw2.ml.model.ModelConfiguration;
+import it.uniroma2.dicii.isw2.ml.impl.*;
+import it.uniroma2.dicii.isw2.ml.model.*;
 import it.uniroma2.dicii.isw2.properties.PropertiesManager;
 import lombok.extern.slf4j.Slf4j;
 import weka.core.Instances;
@@ -54,6 +43,9 @@ import java.util.Optional;
 @Slf4j
 public class FeatureSelectionStudyWorkflow {
 
+    /**
+     * The trimmed dataset {@link MlWorkflow} writes, which has to have run first.
+     */
     private static final String DATASET_SUFFIX = "-trimmed.csv";
     private static final String REPORT_SUFFIX = "-feature-selection-study.csv";
 
@@ -79,35 +71,7 @@ public class FeatureSelectionStudyWorkflow {
 
     public FeatureSelectionStudyWorkflow() {
         this.projectName = PropertiesManager.getInstance().getProperty("project.name");
-        this.datasetDirectory = Path.of(
-                PropertiesManager.getInstance().getProperty("project.dataset.outputDirectory"));
-    }
-
-    public void execute() {
-        try {
-            MlSettings settings = MlSettings.load();
-            Path file = datasetDirectory.resolve(projectName + DATASET_SUFFIX);
-            Instances data = new WekaCsvDatasetReader().readRetainingIdentity(file);
-            DatasetSplit split = new ReleaseDatasetSplitter(settings, file).split(data);
-            log.info("Leaving the {} test releases, {} to {}, unread: the feature selections are compared "
-                            + "over {} rows of the {} training releases, {} to {}", split.testReleases().size(),
-                    split.testReleases().getFirst(), split.testReleases().getLast(),
-                    split.training().numInstances(), split.trainingReleases().size(),
-                    split.trainingReleases().getFirst(), split.trainingReleases().getLast());
-            describeSelections(split.training(), settings);
-
-            List<EvaluationOutcome> outcomes;
-            try (CsvEvaluationReportWriter report = CsvEvaluationReportWriter.open(
-                    datasetDirectory.resolve(projectName + REPORT_SUFFIX))) {
-                outcomes = compare(split.training(), settings, report);
-            }
-            summarise(outcomes, settings);
-            log.info("Feature selections compared successfully!");
-        } catch (DatasetException e) {
-            log.error("Error reading the dataset the feature selections are compared on", e);
-        } catch (MlException e) {
-            log.error("Error comparing the feature selections", e);
-        }
+        this.datasetDirectory = Path.of(PropertiesManager.getInstance().getProperty("project.dataset.outputDirectory"));
     }
 
     /**
@@ -124,11 +88,9 @@ public class FeatureSelectionStudyWorkflow {
         for (FeatureSelectionKind kind : settings.featureSelectionTechniques()) {
             try {
                 List<String> kept = selector.select(training, kind);
-                log.info("{} keeps {} of the {} attributes of the training releases: {}", kind.getLabel(),
-                        kept.size(), attributes, String.join(", ", kept));
+                log.info("{} keeps {} of the {} attributes of the training releases: {}", kind.getLabel(), kept.size(), attributes, String.join(", ", kept));
             } catch (MlException e) {
-                log.warn("Unable to tell which attributes {} keeps of the training releases",
-                        kind.getLabel(), e);
+                log.warn("Unable to tell which attributes {} keeps of the training releases", kind.getLabel(), e);
             }
         }
     }
@@ -144,13 +106,10 @@ public class FeatureSelectionStudyWorkflow {
      * @return how each model scored under each pairing
      * @throws MlException if a score cannot be written
      */
-    private static List<EvaluationOutcome> compare(Instances training, MlSettings settings,
-                                                   CsvEvaluationReportWriter report) throws MlException {
+    private static List<EvaluationOutcome> compare(Instances training, MlSettings settings, CsvEvaluationReportWriter report) throws MlException {
         ModelEvaluator evaluator = new CrossValidatingEvaluator(new WekaClassifierFactory(settings), settings);
         List<ModelConfiguration> configurations = settings.configurations();
-        log.info("Validating {} models under {} balancing techniques and {} feature selections over {} "
-                        + "folds", settings.classifiers().size(), settings.balancingTechniques().size(),
-                settings.featureSelectionTechniques().size(), settings.folds());
+        log.info("Validating {} models under {} balancing techniques and {} feature selections over {} " + "folds", settings.classifiers().size(), settings.balancingTechniques().size(), settings.featureSelectionTechniques().size(), settings.folds());
         List<EvaluationOutcome> outcomes = new ArrayList<>(configurations.size());
         for (ModelConfiguration configuration : configurations) {
             try {
@@ -158,8 +117,7 @@ public class FeatureSelectionStudyWorkflow {
                 report.write(outcome);
                 outcomes.add(outcome);
             } catch (MlException e) {
-                log.error("Unable to validate {}. Leaving it out of the comparison...",
-                        configuration.describe(), e);
+                log.error("Unable to validate {}. Leaving it out of the comparison...", configuration.describe(), e);
             }
         }
         return outcomes;
@@ -174,19 +132,12 @@ public class FeatureSelectionStudyWorkflow {
      * @param settings the models and techniques, in the order they were measured, and the folds cut
      */
     private static void summarise(List<EvaluationOutcome> outcomes, MlSettings settings) {
-        StringBuilder table = new StringBuilder(String.format(Locale.ROOT,
-                "How each model predicts the buggy classes, validated over %d folds of the training "
-                        + "releases:%n", settings.folds()));
-        table.append(String.format(Locale.ROOT, ROW_FORMAT, "Classifier", "Balancing", "FeatureSelection",
-                "Accuracy", "Precision", "Recall", "F1", "AUC", "Kappa"));
+        StringBuilder table = new StringBuilder(String.format(Locale.ROOT, "How each model predicts the buggy classes, validated over %d folds of the training " + "releases:%n", settings.folds()));
+        table.append(String.format(Locale.ROOT, ROW_FORMAT, "Classifier", "Balancing", "FeatureSelection", "Accuracy", "Precision", "Recall", "F1", "AUC", "Kappa"));
         for (EvaluationOutcome outcome : outcomes) {
-            table.append(String.format(Locale.ROOT, ROW_FORMAT, outcome.classifier().getLabel(),
-                    outcome.balancing().getLabel(), outcome.featureSelection().getLabel(),
-                    score(outcome.accuracy()), score(outcome.precision()), score(outcome.recall()),
-                    score(outcome.fMeasure()), score(outcome.areaUnderRoc()), score(outcome.kappa())));
+            table.append(String.format(Locale.ROOT, ROW_FORMAT, outcome.classifier().getLabel(), outcome.balancing().getLabel(), outcome.featureSelection().getLabel(), score(outcome.accuracy()), score(outcome.precision()), score(outcome.recall()), score(outcome.fMeasure()), score(outcome.areaUnderRoc()), score(outcome.kappa())));
         }
-        table.append(String.format(Locale.ROOT, "%nThe feature selection each measure picks for each model "
-                + "and balancing technique:%n"));
+        table.append(String.format(Locale.ROOT, "%nThe feature selection each measure picks for each model " + "and balancing technique:%n"));
         Object[] heading = new Object[Measure.values().length + VERDICT_KEYS];
         heading[0] = "Classifier";
         heading[1] = "Balancing";
@@ -196,8 +147,7 @@ public class FeatureSelectionStudyWorkflow {
         table.append(String.format(Locale.ROOT, VERDICT_FORMAT, heading));
         for (ClassifierKind classifier : settings.classifiers()) {
             for (BalancingKind balancing : settings.balancingTechniques()) {
-                table.append(String.format(Locale.ROOT, VERDICT_FORMAT,
-                        verdict(outcomes, classifier, balancing)));
+                table.append(String.format(Locale.ROOT, VERDICT_FORMAT, verdict(outcomes, classifier, balancing)));
             }
         }
         log.info(table.toString());
@@ -211,19 +161,13 @@ public class FeatureSelectionStudyWorkflow {
      * selection it picks and the figure it won with — blank if the model scored no number under any of
      * them
      */
-    private static Object[] verdict(List<EvaluationOutcome> outcomes, ClassifierKind classifier,
-                                    BalancingKind balancing) {
+    private static Object[] verdict(List<EvaluationOutcome> outcomes, ClassifierKind classifier, BalancingKind balancing) {
         Object[] cells = new Object[Measure.values().length + VERDICT_KEYS];
         cells[0] = classifier.getLabel();
         cells[1] = balancing.getLabel();
         for (Measure measure : Measure.values()) {
-            Optional<EvaluationOutcome> best = BestOutcome.of(outcomes,
-                    outcome -> outcome.classifier() == classifier && outcome.balancing() == balancing,
-                    measure);
-            cells[measure.ordinal() + VERDICT_KEYS] = best
-                    .map(outcome -> outcome.featureSelection().getLabel() + " ("
-                            + score(measure.of(outcome)) + ")")
-                    .orElse("");
+            Optional<EvaluationOutcome> best = BestOutcome.of(outcomes, outcome -> outcome.classifier() == classifier && outcome.balancing() == balancing, measure);
+            cells[measure.ordinal() + VERDICT_KEYS] = best.map(outcome -> outcome.featureSelection().getLabel() + " (" + score(measure.of(outcome)) + ")").orElse("");
         }
         return cells;
     }
@@ -237,6 +181,28 @@ public class FeatureSelectionStudyWorkflow {
             return "";
         }
         return String.format(Locale.ROOT, "%.4f", value);
+    }
+
+    public void execute() {
+        try {
+            MlSettings settings = MlSettings.load();
+            Path file = datasetDirectory.resolve(projectName + DATASET_SUFFIX);
+            Instances data = new WekaCsvDatasetReader().readRetainingIdentity(file);
+            DatasetSplit split = new ReleaseDatasetSplitter(settings, file).split(data);
+            log.info("Leaving the {} test releases, {} to {}, unread: the feature selections are compared " + "over {} rows of the {} training releases, {} to {}", split.testReleases().size(), split.testReleases().getFirst(), split.testReleases().getLast(), split.training().numInstances(), split.trainingReleases().size(), split.trainingReleases().getFirst(), split.trainingReleases().getLast());
+            describeSelections(split.training(), settings);
+
+            List<EvaluationOutcome> outcomes;
+            try (CsvEvaluationReportWriter report = CsvEvaluationReportWriter.open(datasetDirectory.resolve(projectName + REPORT_SUFFIX))) {
+                outcomes = compare(split.training(), settings, report);
+            }
+            summarise(outcomes, settings);
+            log.info("Feature selections compared successfully!");
+        } catch (DatasetException e) {
+            log.error("Error reading the dataset the feature selections are compared on, which MlMain " + "writes and has to have run first", e);
+        } catch (MlException e) {
+            log.error("Error comparing the feature selections", e);
+        }
     }
 
 }
