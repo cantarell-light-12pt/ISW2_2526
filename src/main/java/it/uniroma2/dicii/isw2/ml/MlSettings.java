@@ -134,6 +134,14 @@ public record MlSettings(List<ClassifierKind> classifiers, List<BalancingKind> b
     }
 
     /**
+     * @return which share of the releases of the whole dataset the trimmed one keeps, the earliest
+     * first — a third when the property leaves it open
+     */
+    public static double trimFraction() {
+        return number("trimFraction", 0.33);
+    }
+
+    /**
      * Reads the settings out of the properties of the project, falling back on the values below for any
      * of them the file does not carry.
      *

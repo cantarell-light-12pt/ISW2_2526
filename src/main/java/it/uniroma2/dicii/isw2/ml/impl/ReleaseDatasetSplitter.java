@@ -1,21 +1,16 @@
 package it.uniroma2.dicii.isw2.ml.impl;
 
 import it.uniroma2.dicii.isw2.dataset.exception.DatasetException;
-import it.uniroma2.dicii.isw2.dataset.impl.CsvDatasetWriter;
 import it.uniroma2.dicii.isw2.dataset.impl.WekaCsvDatasetReader;
 import it.uniroma2.dicii.isw2.ml.DatasetSplitter;
 import it.uniroma2.dicii.isw2.ml.MlSettings;
 import it.uniroma2.dicii.isw2.ml.exception.MlException;
 import it.uniroma2.dicii.isw2.ml.model.DatasetSplit;
 import lombok.extern.slf4j.Slf4j;
-import weka.core.Attribute;
 import weka.core.Instances;
 
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Cuts the dataset at a release: the earliest {@code project.ml.trainingFraction} of them are what a
@@ -36,20 +31,11 @@ import java.util.Set;
  * set at 3.4.0 and opens the test set at 3.3.4. That reads oddly and is right — the ordering below is
  * the one the file was written in, which is the one the versions were numbered in, which is by date.
  * <p>
- * The releases are ordered as the file holds them, which is the order they were published in — {@code
- * Workflow} measures the versions in the order {@code Version.getIndex()} gives them, which is by
- * release date, and appends the rows of each as it goes. That is an assumption about a file written
- * elsewhere, so it is checked rather than trusted: a release whose rows are not contiguous means the
- * file was not written release by release, and everything below it would be cutting the history at a
- * point that is not a point in time.
+ * The releases are ordered as the file holds them, which is the order they were published in: see
+ * {@link ReleaseRows}, which checks that the file was written release by release.
  */
 @Slf4j
 public class ReleaseDatasetSplitter implements DatasetSplitter {
-
-    /**
-     * Where the column naming the release a row belongs to sits, as {@link CsvDatasetWriter} writes it.
-     */
-    private static final int VERSION_COLUMN = 0;
 
     private final MlSettings settings;
 
@@ -76,34 +62,15 @@ public class ReleaseDatasetSplitter implements DatasetSplitter {
     }
 
     /**
-     * Reads which releases the dataset holds, and checks that it holds each of them in one piece.
+     * Reads which releases the dataset holds, and checks that there is a later one to test on.
      *
      * @param data the whole dataset, with its identity columns
      * @return the releases, in the order the file introduces them
-     * @throws MlException if the dataset does not name a release per row, or holds one in two pieces
+     * @throws MlException if the dataset does not name a release per row, holds one in two pieces, or
+     *                     holds a single release
      */
     private List<String> releasesInOrder(Instances data) throws MlException {
-        Attribute version = data.attribute(VERSION_COLUMN);
-        if (version == null || !CsvDatasetWriter.IDENTITY_COLUMNS.getFirst().equals(version.name())) {
-            throw new MlException("The dataset '" + file + "' does not open with the column naming the "
-                    + "release of a row, which is what a release-aware split is cut on");
-        }
-        List<String> releases = new ArrayList<>();
-        String current = null;
-        for (int i = 0; i < data.numInstances(); i++) {
-            String release = data.instance(i).stringValue(VERSION_COLUMN);
-            if (release.equals(current)) {
-                continue;
-            }
-            if (releases.contains(release)) {
-                throw new MlException("Release '" + release + "' holds rows in two places in the "
-                        + "dataset '" + file + "', which is written release by release. Its releases "
-                        + "can no longer be ordered by where its rows are, so the history cannot be cut "
-                        + "in two at a point in time");
-            }
-            releases.add(release);
-            current = release;
-        }
+        List<String> releases = ReleaseRows.releasesInOrder(data, file);
         if (releases.size() < 2) {
             throw new MlException("The dataset '" + file + "' holds " + releases.size()
                     + " release(s): there is no later release to test on");
@@ -129,14 +96,7 @@ public class ReleaseDatasetSplitter implements DatasetSplitter {
 
     @Override
     public Instances rowsOfReleases(Instances data, List<String> releases) {
-        Set<String> kept = new HashSet<>(releases);
-        Instances rows = new Instances(data, 0);
-        for (int i = 0; i < data.numInstances(); i++) {
-            if (kept.contains(data.instance(i).stringValue(VERSION_COLUMN))) {
-                rows.add(data.instance(i));
-            }
-        }
-        return rows;
+        return ReleaseRows.of(data, releases);
     }
 
     /**

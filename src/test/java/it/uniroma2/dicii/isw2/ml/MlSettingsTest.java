@@ -224,6 +224,11 @@ public class MlSettingsTest {
     }
 
     @Test
+    public void testTheModelsAreStudiedOnTheEarliestThirdOfTheReleases() {
+        assertEquals(0.33, MlSettings.trimFraction(), 0.0);
+    }
+
+    @Test
     public void testAnEvaluationWithoutAModelIsRefused() {
         assertThrows(IllegalArgumentException.class, () -> settings(List.of()));
     }

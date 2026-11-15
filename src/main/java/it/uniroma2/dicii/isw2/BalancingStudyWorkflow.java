@@ -59,6 +59,9 @@ import java.util.Optional;
 @Slf4j
 public class BalancingStudyWorkflow {
 
+    /**
+     * The trimmed dataset {@link MlWorkflow} writes, which has to have run first.
+     */
     private static final String DATASET_SUFFIX = "-trimmed.csv";
     private static final String REPORT_SUFFIX = "-balancing-study.csv";
 
@@ -97,7 +100,8 @@ public class BalancingStudyWorkflow {
             summarise(outcomes, settings.classifiers(), study);
             log.info("Balancing techniques compared successfully!");
         } catch (DatasetException e) {
-            log.error("Error reading the dataset the balancing techniques are compared on", e);
+            log.error("Error reading the dataset the balancing techniques are compared on, which MlMain "
+                    + "writes and has to have run first", e);
         } catch (MlException e) {
             log.error("Error comparing the balancing techniques", e);
         }

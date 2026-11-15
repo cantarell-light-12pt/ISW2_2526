@@ -56,7 +56,7 @@ public class WekaCsvDatasetReader implements DatasetReader {
     public Instances readRetainingIdentity(Path file) throws DatasetException {
         if (!Files.isReadable(file)) {
             throw new DatasetException("The dataset '" + file + "' does not exist, or cannot be read. "
-                    + "It is the file the extraction workflow writes, which has to have run first");
+                    + "It is written by an earlier workflow, which has to have run first");
         }
         Instances data = load(file);
         checkColumns(file, data);
