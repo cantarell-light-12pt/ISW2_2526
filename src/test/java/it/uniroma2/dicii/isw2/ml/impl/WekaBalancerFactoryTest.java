@@ -83,7 +83,7 @@ public class WekaBalancerFactoryTest {
     }
 
     /**
-     * A training half holding a single class is nothing to balance, which is not a failure: the rows
+     * A training fold holding a single class is nothing to balance, which is not a failure: the rows
      * come back as they are, so that whatever reads them is left to decide what a model trained on one
      * class is worth.
      */

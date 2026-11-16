@@ -50,7 +50,7 @@ public class WekaFeatureSelectorTest {
     public void setUp() {
         data = SyntheticInstances.separable(ROWS);
         MlSettings settings = new MlSettings(List.of(ClassifierKind.NAIVE_BAYES), List.of(BalancingKind.NONE),
-                List.of(FeatureSelectionKind.values()), 0.67, 2, 1, SyntheticInstances.BUGGY, 1, 10, 1,
+                List.of(FeatureSelectionKind.values()), 2, 1, SyntheticInstances.BUGGY, 1, 10, 1,
                 KEPT_BY_GAIN);
         selector = new WekaFeatureSelector(settings);
     }

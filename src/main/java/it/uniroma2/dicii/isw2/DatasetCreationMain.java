@@ -1,9 +1,9 @@
 package it.uniroma2.dicii.isw2;
 
-public class Main {
+public class DatasetCreationMain {
 
     public static void main(String[] args) {
-        Workflow workflow = new Workflow();
+        DatasetCreationWorkflow workflow = new DatasetCreationWorkflow();
         workflow.execute();
     }
 

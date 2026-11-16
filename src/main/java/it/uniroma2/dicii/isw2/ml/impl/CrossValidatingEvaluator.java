@@ -5,7 +5,6 @@ import it.uniroma2.dicii.isw2.ml.ModelEvaluator;
 import it.uniroma2.dicii.isw2.ml.ModelFactory;
 import it.uniroma2.dicii.isw2.ml.exception.MlException;
 import it.uniroma2.dicii.isw2.ml.model.EvaluationOutcome;
-import it.uniroma2.dicii.isw2.ml.model.EvaluationPhase;
 import it.uniroma2.dicii.isw2.ml.model.ModelConfiguration;
 import lombok.extern.slf4j.Slf4j;
 import weka.classifiers.Evaluation;
@@ -16,19 +15,14 @@ import java.time.Instant;
 import java.util.Random;
 
 /**
- * Measures a model by cross-validating it over the rows it is given, which are the <b>training</b> half
- * of the split and never the test half.
+ * Measures a model by cross-validating it over the rows it is given, which are those of the trimmed
+ * dataset.
  * <p>
  * The folds are cut by {@code Evaluation.crossValidateModel}, which randomises the rows, stratifies
  * them so that every fold holds the buggy share of the whole, and then trains on nine tenths and tests
  * on the tenth, accumulating the predictions of all ten into a single confusion matrix. That is the
  * same routine the Weka Explorer runs, so a figure reported here and one read off the Explorer are the
  * answers of the same engine rather than two implementations that ought to agree.
- * <p>
- * What this phase is for is choosing between models, and the reason it is confined to the training set
- * is that choosing is itself a way of reading the data: a model picked because it scored best on the
- * test set has been fitted to it by hand, and the figure that made it win is no longer an estimate of
- * anything. The test set is read once, by {@link HoldOutTester}, after everything has been decided.
  * <p>
  * Balancing happens inside every fold and of its training part alone, without anything here asking for
  * it: the model the factory builds balances whatever it is trained on, and each fold trains a copy of it
@@ -56,12 +50,11 @@ public class CrossValidatingEvaluator implements ModelEvaluator {
         // Its own copy: the validation shuffles what it is given, and the rows belong to the caller
         Instances working = new Instances(data);
         Instant start = Instant.now();
-        log.info("Validating {} over {} folds of {} training rows", configuration.describe(), folds,
+        log.info("Validating {} over {} folds of {} rows", configuration.describe(), folds,
                 working.numInstances());
         Evaluation evaluation = crossValidate(working, configuration, folds);
-        EvaluationOutcome outcome = EvaluationOutcomes.from(evaluation, configuration,
-                EvaluationPhase.VALIDATION, folds, positiveClassIndex,
-                Duration.between(start, Instant.now()));
+        EvaluationOutcome outcome = EvaluationOutcomes.from(evaluation, configuration, folds,
+                positiveClassIndex, Duration.between(start, Instant.now()));
         log.info("{} validated at accuracy {} and AUC {} on the buggy class in {}s",
                 configuration.describe(), EvaluationOutcomes.rounded(outcome.accuracy()),
                 EvaluationOutcomes.rounded(outcome.areaUnderRoc()), outcome.elapsed().toSeconds());

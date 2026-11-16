@@ -15,9 +15,9 @@ import java.util.Set;
  * Reads the releases a dataset holds off the column naming the release of each row, and collects the
  * rows of some of them.
  * <p>
- * Both the trimming and the splitting of the dataset cut the history at a release, and both order the
- * releases as the file holds them — {@code Workflow} measures the versions in the order {@code
- * Version.getIndex()} gives them, which is by release date, and appends the rows of each as it goes.
+ * The trimming of the dataset cuts the history at a release, and orders the releases as the file holds
+ * them — {@code Workflow} measures the versions in the order {@code Version.getIndex()} gives them,
+ * which is by release date, and appends the rows of each as it goes.
  * That is an assumption about a file written elsewhere, so it is checked rather than trusted: a release
  * whose rows are not contiguous means the file was not written release by release, and a cut made on
  * it would fall at a point that is not a point in time.

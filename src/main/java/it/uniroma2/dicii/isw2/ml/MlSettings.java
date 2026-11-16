@@ -27,8 +27,6 @@ import java.util.List;
  * @param featureSelectionTechniques which of the attributes of the training rows a model is trained on,
  *                                   one technique per measurement of each model and balancing, in the
  *                                   order they are reported
- * @param trainingFraction           which share of the releases a model is trained on, the rest being
- *                                   held back to test it on
  * @param folds                      how many folds each of them is cross-validated over
  * @param seed                       what the folds and the samples are drawn with, so that two runs agree
  * @param positiveClass              the label a per-class measure is read of, as it reads in the dataset
@@ -39,9 +37,9 @@ import java.util.List;
  */
 @Slf4j
 public record MlSettings(List<ClassifierKind> classifiers, List<BalancingKind> balancingTechniques,
-                         List<FeatureSelectionKind> featureSelectionTechniques, double trainingFraction,
-                         int folds, int seed, String positiveClass, int threads, int randomForestIterations,
-                         int ibkNeighbours, int infoGainAttributes) {
+                         List<FeatureSelectionKind> featureSelectionTechniques, int folds, int seed,
+                         String positiveClass, int threads, int randomForestIterations, int ibkNeighbours,
+                         int infoGainAttributes) {
 
     private static final String PREFIX = "project.ml.";
 
@@ -67,14 +65,6 @@ public record MlSettings(List<ClassifierKind> classifiers, List<BalancingKind> b
                     + FeatureSelectionKind.NONE.getLabel());
         }
         featureSelectionTechniques = List.copyOf(featureSelectionTechniques);
-        // Written as what is rejected rather than as the negation of what is accepted, so that it reads
-        // as the sentence below it. NaN fails every comparison, so it falls through neither test and is
-        // rejected here as well
-        if (!(trainingFraction > 0 && trainingFraction < 1)) {
-            throw new IllegalArgumentException("A model is trained on some of the releases and tested "
-                    + "on the rest, so the training fraction lies strictly between 0 and 1, not "
-                    + trainingFraction);
-        }
         if (folds < 2) {
             throw new IllegalArgumentException("A cross-validation needs at least two folds, not " + folds);
         }
@@ -116,24 +106,6 @@ public record MlSettings(List<ClassifierKind> classifiers, List<BalancingKind> b
     }
 
     /**
-     * @param fraction which share of the releases to train on instead
-     * @return these settings, cutting the releases there
-     * @throws IllegalArgumentException if the share leaves no release on one of the two sides
-     */
-    public MlSettings withTrainingFraction(double fraction) {
-        return new MlSettings(classifiers, balancingTechniques, featureSelectionTechniques, fraction, folds,
-                seed, positiveClass, threads, randomForestIterations, ibkNeighbours, infoGainAttributes);
-    }
-
-    /**
-     * @return which share of the training releases the balancing study trains on, the rest of them being
-     * what each technique is compared over — two thirds when the property leaves it open
-     */
-    public static double balancingStudyTrainingFraction() {
-        return number("balancingStudy.trainingFraction", 0.66);
-    }
-
-    /**
      * @return which share of the releases of the whole dataset the trimmed one keeps, the earliest
      * first — a third when the property leaves it open
      */
@@ -153,7 +125,6 @@ public record MlSettings(List<ClassifierKind> classifiers, List<BalancingKind> b
                 configuredClassifiers(),
                 configuredBalancing(),
                 configuredFeatureSelection(),
-                number("trainingFraction", 0.67),
                 integer("folds", 10),
                 integer("seed", 1),
                 stringify("positiveClass", "1"),

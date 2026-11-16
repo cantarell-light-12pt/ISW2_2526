@@ -2,7 +2,6 @@ package it.uniroma2.dicii.isw2.ml.impl;
 
 import it.uniroma2.dicii.isw2.ml.exception.MlException;
 import it.uniroma2.dicii.isw2.ml.model.EvaluationOutcome;
-import it.uniroma2.dicii.isw2.ml.model.EvaluationPhase;
 import it.uniroma2.dicii.isw2.ml.model.ModelConfiguration;
 import weka.classifiers.Evaluation;
 import weka.core.Attribute;
@@ -11,12 +10,9 @@ import weka.core.Instances;
 import java.time.Duration;
 
 /**
- * Reads the six measures off a Weka {@code Evaluation}.
- * <p>
- * Shared by the two phases on purpose. They are measured over different rows and answer different
- * questions, but a figure only means the same thing in both if it was read the same way — a precision
- * of one phase taken over the buggy class and of the other averaged over both would put two numbers in
- * one column of the report that cannot be compared.
+ * Reads the six measures off a Weka {@code Evaluation}, in one place, so that every configuration is
+ * read the same way — a precision taken over the buggy class for one model and averaged over both
+ * classes for another would put two numbers in one column of the report that cannot be compared.
  */
 final class EvaluationOutcomes {
 
@@ -28,17 +24,15 @@ final class EvaluationOutcomes {
      * @param evaluation         the predictions to read
      * @param configuration      which model made them, how the rows it was trained on were balanced
      *                           and which of their attributes it was trained on
-     * @param phase              on which occasion
-     * @param folds              how many folds it was cross-validated over, or zero if it was not
+     * @param folds              how many folds it was cross-validated over
      * @param positiveClassIndex which value of the label the per-class measures are read of
-     * @param elapsed            how long the phase took
+     * @param elapsed            how long the validation took
      * @return what it scored
      */
     static EvaluationOutcome from(Evaluation evaluation, ModelConfiguration configuration,
-                                  EvaluationPhase phase, int folds, int positiveClassIndex,
-                                  Duration elapsed) {
+                                  int folds, int positiveClassIndex, Duration elapsed) {
         return new EvaluationOutcome(configuration.classifier(), configuration.balancing(),
-                configuration.featureSelection(), phase, folds, evaluation.pctCorrect() / 100,
+                configuration.featureSelection(), folds, evaluation.pctCorrect() / 100,
                 evaluation.precision(positiveClassIndex), evaluation.recall(positiveClassIndex),
                 evaluation.fMeasure(positiveClassIndex), evaluation.areaUnderROC(positiveClassIndex),
                 evaluation.kappa(), elapsed);
@@ -47,8 +41,8 @@ final class EvaluationOutcomes {
     /**
      * Resolves the class the per-class measures are read of, from the data rather than from anything
      * fixed when an evaluator was built: the label's values are numbered in the order the file happens
-     * to introduce them, and each half of a split, or a dataset a feature selection has reduced, is a
-     * header that has to be asked again.
+     * to introduce them, and a dataset a feature selection has reduced is a header that has to be asked
+     * again.
      *
      * @param data          the rows being measured
      * @param positiveClass the label of the buggy class, as it reads in the dataset

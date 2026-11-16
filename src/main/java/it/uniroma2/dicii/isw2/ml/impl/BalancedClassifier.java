@@ -12,12 +12,10 @@ import java.io.Serial;
 /**
  * A model that balances the rows it is trained on, and nothing else.
  * <p>
- * This is how balancing reaches both phases without either of them knowing about it. The validation
- * hands each fold a copy of this model and trains it on that fold's nine tenths, so it is those nine
- * tenths that are resampled, and the tenth the fold is measured on is predicted as it is. The inference
- * phase trains it on the whole training half and predicts the test releases, which are never resampled
- * either. Balancing the training half once, before the folds were cut, would have been simpler and
- * wrong: SMOTE would have synthesised rows out of buggy classes a fold later held out, and the fold would
+ * This is how balancing reaches the validation without it knowing about it. The validation hands each
+ * fold a copy of this model and trains it on that fold's nine tenths, so it is those nine tenths that
+ * are resampled, and the tenth the fold is measured on is predicted as it is. Balancing the whole dataset
+ * once, before the folds were cut, would have been simpler and wrong: SMOTE would have synthesised rows out of buggy classes a fold later held out, and the fold would
  * have been measured on the neighbours of rows it had been trained on.
  * <p>
  * Predicting is left to the model it wraps, untouched. Resampling is something done to a training set,

@@ -83,7 +83,7 @@ public class FilterBalancerTest {
     }
 
     /**
-     * The rows belong to the caller, who balances one half of a split and expects the other half to be
+     * The rows belong to the caller, who balances the training part of a fold and expects the rest to be
      * the one it was.
      */
     @Test

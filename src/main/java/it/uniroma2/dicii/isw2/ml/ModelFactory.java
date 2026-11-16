@@ -12,8 +12,8 @@ import weka.classifiers.Classifier;
  * comparison is then a value of {@link ClassifierKind} and a branch here, and no change at all to the
  * evaluator or to the workflow. The balancing and the feature selection are part of the model rather
  * than something done to the rows before they reach it, so that whatever trains the model balances and
- * selects over exactly what the model is trained on — the training part of each fold, or the whole
- * training half — and nothing it is measured on.
+ * selects over exactly what the model is trained on — the training part of each fold — and nothing it
+ * is measured on.
  */
 public interface ModelFactory {
 

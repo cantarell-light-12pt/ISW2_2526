@@ -57,7 +57,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
-public class Workflow {
+public class DatasetCreationWorkflow {
 
     /**
      * How the dataset holding every released version is named, after the project it describes.
@@ -80,7 +80,7 @@ public class Workflow {
     private final long pmdTimeoutSeconds;
     private final Path datasetDirectory;
 
-    public Workflow() {
+    public DatasetCreationWorkflow() {
         this.projectName = PropertiesManager.getInstance().getProperty("project.name");
         String jiraBaseUrl = PropertiesManager.getInstance().getProperty("project.jira.baseUrl");
         String jiraVersionsParameterizedPath = PropertiesManager.getInstance().getProperty("project.jira.versionsParameterizedPath");

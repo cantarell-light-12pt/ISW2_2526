@@ -118,7 +118,7 @@ final class SyntheticInstances {
 
     /**
      * Builds the dataset as it comes off the file, with the columns naming each row still on it, which
-     * is what a release-aware split is cut on.
+     * is what a release-aware trim is cut on.
      *
      * @param releases       the releases to build, in the order the file holds them
      * @param rowsPerRelease how many classes each of them holds
@@ -230,7 +230,7 @@ final class SyntheticInstances {
      */
     static MlSettings settings(ClassifierKind classifier, String positiveClass, BalancingKind balancing) {
         return new MlSettings(List.of(classifier), List.of(balancing), List.of(FeatureSelectionKind.NONE),
-                0.67, 2, 1, positiveClass, 1, 10, 1, 1);
+                2, 1, positiveClass, 1, 10, 1, 1);
     }
 
     /**
