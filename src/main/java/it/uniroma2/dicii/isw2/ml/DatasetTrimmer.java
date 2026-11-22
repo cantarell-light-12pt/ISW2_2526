@@ -16,7 +16,7 @@ public interface DatasetTrimmer {
      * @param data the whole dataset, with the columns naming each row still on it — trimming needs to
      *             read which release a row belongs to
      * @return the rows of the releases kept, under the header of the whole and with those columns still
-     * on, so that they can be written out and split as the whole would be
+     * on, so that they can be written out as the whole would be
      * @throws MlException if the dataset cannot be trimmed, or what is left of it holds nothing to learn
      */
     Instances trim(Instances data) throws MlException;

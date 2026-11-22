@@ -26,7 +26,7 @@ import java.util.List;
  * <p>
  * The rows kept keep the header of the whole dataset, the columns naming each row included: the label
  * stays the nominal attribute it was read as, with its values in the order the whole file introduced
- * them, and the trimmed rows can be written out and split exactly as the whole would be.
+ * them, and the trimmed rows can be written out exactly as the whole would be.
  */
 @Slf4j
 public class ReleaseDatasetTrimmer implements DatasetTrimmer {

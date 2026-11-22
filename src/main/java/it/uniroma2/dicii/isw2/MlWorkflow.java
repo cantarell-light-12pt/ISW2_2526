@@ -3,20 +3,21 @@ package it.uniroma2.dicii.isw2;
 import it.uniroma2.dicii.isw2.dataset.exception.DatasetException;
 import it.uniroma2.dicii.isw2.dataset.impl.WekaCsvDatasetReader;
 import it.uniroma2.dicii.isw2.dataset.impl.WekaCsvDatasetSaver;
-import it.uniroma2.dicii.isw2.ml.DatasetSplitter;
 import it.uniroma2.dicii.isw2.ml.DatasetTrimmer;
+import it.uniroma2.dicii.isw2.ml.FeatureSelector;
 import it.uniroma2.dicii.isw2.ml.MlSettings;
 import it.uniroma2.dicii.isw2.ml.ModelEvaluator;
-import it.uniroma2.dicii.isw2.ml.ModelTester;
 import it.uniroma2.dicii.isw2.ml.exception.MlException;
+import it.uniroma2.dicii.isw2.ml.impl.BestOutcome;
 import it.uniroma2.dicii.isw2.ml.impl.CrossValidatingEvaluator;
 import it.uniroma2.dicii.isw2.ml.impl.CsvEvaluationReportWriter;
-import it.uniroma2.dicii.isw2.ml.impl.HoldOutTester;
-import it.uniroma2.dicii.isw2.ml.impl.ReleaseDatasetSplitter;
 import it.uniroma2.dicii.isw2.ml.impl.ReleaseDatasetTrimmer;
 import it.uniroma2.dicii.isw2.ml.impl.WekaClassifierFactory;
-import it.uniroma2.dicii.isw2.ml.model.DatasetSplit;
+import it.uniroma2.dicii.isw2.ml.impl.WekaFeatureSelector;
+import it.uniroma2.dicii.isw2.ml.model.ClassifierKind;
 import it.uniroma2.dicii.isw2.ml.model.EvaluationOutcome;
+import it.uniroma2.dicii.isw2.ml.model.FeatureSelectionKind;
+import it.uniroma2.dicii.isw2.ml.model.Measure;
 import it.uniroma2.dicii.isw2.ml.model.ModelConfiguration;
 import it.uniroma2.dicii.isw2.properties.PropertiesManager;
 import lombok.extern.slf4j.Slf4j;
@@ -26,51 +27,36 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 
 /**
- * Trains a model on the dataset the extraction workflow builds and reports how well it predicts which
- * classes are faulty.
+ * Chooses the classifier: cross-validates every configured model under every configured pairing of a
+ * balancing technique and a feature selection, and reports, for each model, the pairing it scored best
+ * under by each measure.
  * <p>
  * It reads the <b>whole</b> dataset and trims it itself to the earliest {@code project.ml.trimFraction}
  * of the releases, which is what the models are studied on. The buggy label of a release is only as
  * good as the defects reported against it, and the last releases of a project have had the least time to
  * have any reported. Learning from the tail would be learning that the recent releases are clean, which
  * is a fact about the calendar and not about the code — the snoring effect. The trimmed dataset is
- * written beside the whole one, as {@code <project>-trimmed.csv}, for the studies choosing a balancing
- * technique and a feature selection to read, and for a reader to inspect.
+ * written beside the whole one, as {@code <project>-trimmed.csv}, for a reader to inspect.
  * <p>
  * The dataset is read as Weka needs it: the label is the nominal class, its buggy value read off how it
  * is written ({@code 1}) and never off its position, and the columns naming each row are kept only until
- * the split, which reads the release off them and drops them from both halves.
+ * the trim, which reads the release off them, and dropped before any model sees a row.
  * <p>
- * The run has three phases after the trim, in this (necessary) order:
- * <ol>
- * <li><b>split</b> — the releases are cut into the earliest {@code project.ml.trainingFraction} of them
- * and the rest. Cut at a <i>release</i>, not at a row, so that every training row is older than every
- * test row. A long-lived class still appears in both halves, which is no fault — its earlier releases
- * are the history a predictor legitimately has — but a random row split would additionally let the
- * model read a class's <i>future</i>, and a near-identical row from a release that had not happened yet
- * is information nobody could have had;</li>
- * <li><b>validation</b> — each model is cross-validated over the folds of the <i>training</i> portion
- * alone. This is what one model is chosen over another by, and confining it to the training portion is
- * what keeps choosing from costing anything: a model picked because it scored best on the test rows has
- * been fitted to them by hand;</li>
- * <li><b>inference</b> — each model is then trained on the whole training portion and asked about the test
- * releases, which nothing has read until this point. This is the figure the project is reported on.</li>
- * </ol>
- * Both phases report the same six measures, and the report tells them apart by a {@code Phase} column
- * rather than by two files, so that the two figures of a model sit next to each other. Expect the test
- * figures to be the <b>lower</b> pair: they are of releases the model has never seen, and the gap
- * between the two is itself the finding — it is how much of the validation score was the model
- * recognising classes rather than recognising faults.
+ * Every model is then cross-validated over {@code project.ml.folds} folds of the trimmed rows, once per
+ * pairing of a configured balancing technique with a configured feature selection, and nothing else
+ * decides between them. Both techniques are part of the model rather than something done to the rows
+ * before the folds are cut: each fold chooses its attributes out of the nine tenths it trains on,
+ * balances those nine tenths reduced to them, and measures the tenth it held out as it is. Balancing
+ * the whole dataset before cutting the folds would have SMOTE synthesise rows out of classes a fold then
+ * tests on, and choosing the attributes over the whole would have every fold choose with the tenth it is
+ * measured on in hand.
  * <p>
- * Every model is measured once per configured balancing technique, both phases each time. The technique
- * is applied to the rows a model is <i>trained</i> on and to no others — the training part of each fold,
- * then the whole training portion — so the held-out tenth of a fold and the test releases are always the
- * rows as they are, and the figures of two techniques are estimates of the same population. The same
- * holds of every configured feature selection, which is crossed with every balancing technique: the
- * attributes are chosen out of the rows a model is trained on, and the rows it is measured on are only
- * reduced to what was chosen.
+ * The report holds one row per model and pairing, and the log ends with the verdict: per model and per
+ * {@link Measure}, the pairing that scored best and the figure it won with. The verdict is per measure on
+ * purpose — they disagree, and which of them the choice is made by is the reader's call.
  * <p>
  * Nothing here names a classifier, a technique or a Weka class. Which models are measured, how their
  * training rows are balanced and which of their attributes they are trained on are the configured lists
@@ -89,7 +75,13 @@ public class MlWorkflow {
      * than as the number it is, so that a cell no model could fill can be left blank instead of reading
      * {@code NaN}.
      */
-    private static final String ROW_FORMAT = "%-14s %-14s %-16s %-11s %9s %9s %9s %9s %9s %9s%n";
+    private static final String ROW_FORMAT = "%-14s %-14s %-16s %9s %9s %9s %9s %9s %9s %9s%n";
+
+    /**
+     * How one line of the logged verdict is laid out: a model and a measure, then the pairing of
+     * techniques that measure picks and the figure it won with.
+     */
+    private static final String VERDICT_FORMAT = "%-14s %-10s %-14s %-16s %9s%n";
 
     private final String projectName;
     private final Path datasetDirectory;
@@ -104,26 +96,25 @@ public class MlWorkflow {
         try {
             MlSettings settings = MlSettings.load();
             Path file = datasetDirectory.resolve(projectName + DATASET_SUFFIX);
-            // Read with the columns naming each row still on it: both the trim and the split are cut on
-            // the release a row belongs to, and the splitter drops them from each half on its way out
+            // Read with the columns naming each row still on it: the trim is cut on the release a row
+            // belongs to, and they are dropped as soon as it is done
             Instances whole = new WekaCsvDatasetReader().readRetainingIdentity(file);
             DatasetTrimmer trimmer = new ReleaseDatasetTrimmer(MlSettings.trimFraction(),
                     settings.positiveClass(), file);
-            Instances data = trimmer.trim(whole);
+            Instances trimmed = trimmer.trim(whole);
             Path trimmedFile = datasetDirectory.resolve(projectName + TRIMMED_SUFFIX);
-            new WekaCsvDatasetSaver().save(data, trimmedFile);
-            DatasetSplitter splitter = new ReleaseDatasetSplitter(settings, trimmedFile);
-            DatasetSplit split = splitter.split(data);
-            log.info("Training on {} rows of {} releases, testing on {} rows of {}",
-                    split.training().numInstances(), split.trainingReleases().size(),
-                    split.test().numInstances(), split.testReleases().size());
+            new WekaCsvDatasetSaver().save(trimmed, trimmedFile);
+            Instances data = WekaCsvDatasetReader.withoutIdentityColumns(trimmedFile, trimmed);
+            log.info("Cross-validating the models over the {} rows of the trimmed dataset",
+                    data.numInstances());
+            describeSelections(data, settings);
 
             List<EvaluationOutcome> outcomes;
             try (CsvEvaluationReportWriter report = CsvEvaluationReportWriter.open(
                     datasetDirectory.resolve(projectName + REPORT_SUFFIX))) {
-                outcomes = measure(split, settings, report);
+                outcomes = measure(data, settings, report);
             }
-            summarise(outcomes, settings.folds());
+            summarise(outcomes, settings);
             log.info("Models evaluated successfully!");
         } catch (DatasetException e) {
             log.error("Error reading the dataset the models are trained on, or writing its trimmed part", e);
@@ -133,95 +124,124 @@ public class MlWorkflow {
     }
 
     /**
-     * Validates and then tests every configured model under every configured pairing of a balancing
-     * technique and a feature selection, writing each row as it comes.
+     * Logs which attributes each configured feature selection keeps out of the whole of the trimmed
+     * rows. They are what a reader can see of a selection, and only that: each fold chooses again out of
+     * its own nine tenths, and may keep a slightly different subset. A technique that cannot be run over
+     * them is only reported, since the comparison may still measure the others.
+     *
+     * @param data     the trimmed rows
+     * @param settings which techniques to run
+     */
+    private static void describeSelections(Instances data, MlSettings settings) {
+        FeatureSelector selector = new WekaFeatureSelector(settings);
+        int attributes = data.numAttributes() - 1;
+        for (FeatureSelectionKind kind : settings.featureSelectionTechniques()) {
+            try {
+                List<String> kept = selector.select(data, kind);
+                log.info("{} keeps {} of the {} attributes of the trimmed dataset: {}", kind.getLabel(),
+                        kept.size(), attributes, String.join(", ", kept));
+            } catch (MlException e) {
+                log.warn("Unable to tell which attributes {} keeps of the trimmed dataset", kind.getLabel(),
+                        e);
+            }
+        }
+    }
+
+    /**
+     * Cross-validates every configured model under every configured pairing of a balancing technique
+     * and a feature selection, writing each row as it comes.
      * <p>
-     * A model that fails costs its own rows and no more: the ones already measured are worth reading
+     * A pairing that fails costs its own row and no more: the ones already measured are worth reading
      * with a row missing from the table.
      *
-     * @param split    the training rows and the held-out test rows
-     * @param settings which models to measure, how to balance their training rows and which of their
-     *                 attributes to keep
+     * @param data     the trimmed rows, which the folds are cut from
+     * @param settings which models to measure, how to balance their training rows, which of their
+     *                 attributes to keep and how many folds to cut
      * @param report   where the scores are written
-     * @return how each of them scored under each pairing in each phase, validation first
+     * @return how each of them scored under each pairing
      * @throws MlException if a score cannot be written
      */
-    private static List<EvaluationOutcome> measure(DatasetSplit split, MlSettings settings,
+    private static List<EvaluationOutcome> measure(Instances data, MlSettings settings,
                                                    CsvEvaluationReportWriter report) throws MlException {
-        WekaClassifierFactory factory = new WekaClassifierFactory(settings);
-        ModelEvaluator evaluator = new CrossValidatingEvaluator(factory, settings);
-        ModelTester tester = new HoldOutTester(factory, settings);
+        ModelEvaluator evaluator =
+                new CrossValidatingEvaluator(new WekaClassifierFactory(settings), settings);
         List<ModelConfiguration> configurations = settings.configurations();
-        log.info("Measuring {} models under {} balancing techniques and {} feature selections, each "
-                        + "validated over {} folds of the training releases and then tested on the held-out "
-                        + "ones", settings.classifiers().size(), settings.balancingTechniques().size(),
+        log.info("Validating {} models under {} balancing techniques and {} feature selections over {} "
+                        + "folds", settings.classifiers().size(), settings.balancingTechniques().size(),
                 settings.featureSelectionTechniques().size(), settings.folds());
-        List<EvaluationOutcome> outcomes = new ArrayList<>(configurations.size() * 2);
+        List<EvaluationOutcome> outcomes = new ArrayList<>(configurations.size());
         for (ModelConfiguration configuration : configurations) {
-            for (EvaluationOutcome outcome : measureOne(split, evaluator, tester, configuration)) {
+            try {
+                EvaluationOutcome outcome = evaluator.evaluate(data, configuration);
                 report.write(outcome);
                 outcomes.add(outcome);
+            } catch (MlException e) {
+                log.error("Unable to validate {}. Leaving it out of the comparison...",
+                        configuration.describe(), e);
             }
         }
         return outcomes;
     }
 
     /**
-     * Runs both phases of one model under one pairing of a balancing technique and a feature selection.
-     *
-     * @param split         the training rows and the held-out test rows
-     * @param evaluator     what cross-validates it over the training rows
-     * @param tester        what trains it and asks it about the test rows
-     * @param configuration which model to measure, how to balance the rows it is trained on and which
-     *                      of their attributes to keep
-     * @return what it scored in each phase, or fewer rows if a phase failed
-     */
-    private static List<EvaluationOutcome> measureOne(DatasetSplit split, ModelEvaluator evaluator,
-                                                      ModelTester tester, ModelConfiguration configuration) {
-        List<EvaluationOutcome> outcomes = new ArrayList<>(2);
-        try {
-            outcomes.add(evaluator.evaluate(split.training(), configuration));
-        } catch (MlException e) {
-            log.error("Unable to validate {}. Leaving it out of the comparison...",
-                    configuration.describe(), e);
-        }
-        try {
-            outcomes.add(tester.test(split.training(), split.test(), configuration));
-        } catch (MlException e) {
-            log.error("Unable to test {} on the held-out releases. Leaving it out of the comparison...",
-                    configuration.describe(), e);
-        }
-        return outcomes;
-    }
-
-    /**
-     * Logs the comparison as a table, two rows per model and pairing of techniques: what it scored
-     * validating over the training releases, and what it scored on the releases it had never seen.
+     * Logs the comparison as a table, one row per model and pairing of techniques, and then the verdict:
+     * for each model and measure, the pairing that measure picks, with the figure that made it win.
      * <p>
-     * The four figures beside accuracy and kappa are of the buggy class alone, and are worth a glance
+     * The four figures beside accuracy, kappa and NPofB20 are of the buggy class alone, and are worth a glance
      * before accuracy is believed: some 23% of the rows are buggy, so a model finding none of them still
      * scores .77, and two models can differ by nothing in accuracy while differing entirely in whether
      * they found anything. Kappa is what says the same thing of the whole matrix — it is what is left of
      * the accuracy once the share of it that guessing at the observed rates would have reached anyway is
      * taken out.
      *
-     * @param outcomes how each model scored in each phase
-     * @param folds    how many folds the validation cut, named in the heading
+     * @param outcomes how each model scored under each pairing
+     * @param settings the models, in the order they were measured, and the folds cut
      */
-    private static void summarise(List<EvaluationOutcome> outcomes, int folds) {
+    private static void summarise(List<EvaluationOutcome> outcomes, MlSettings settings) {
         StringBuilder table = new StringBuilder(String.format(Locale.ROOT,
-                "How each model predicts the buggy classes, validated over %d folds of the training "
-                        + "releases and tested on the held-out ones:%n", folds));
+                "How each model predicts the buggy classes, validated over %d folds of the trimmed "
+                        + "dataset:%n", settings.folds()));
         table.append(String.format(Locale.ROOT, ROW_FORMAT, "Classifier", "Balancing", "FeatureSelection",
-                "Phase", "Accuracy", "Precision", "Recall", "F1", "AUC", "Kappa"));
+                "Accuracy", "Precision", "Recall", "F1", "AUC", "Kappa", "NPofB20"));
         for (EvaluationOutcome outcome : outcomes) {
             table.append(String.format(Locale.ROOT, ROW_FORMAT, outcome.classifier().getLabel(),
                     outcome.balancing().getLabel(), outcome.featureSelection().getLabel(),
-                    outcome.phase().getLabel(),
                     score(outcome.accuracy()), score(outcome.precision()), score(outcome.recall()),
-                    score(outcome.fMeasure()), score(outcome.areaUnderRoc()), score(outcome.kappa())));
+                    score(outcome.fMeasure()), score(outcome.areaUnderRoc()), score(outcome.kappa()),
+                    score(outcome.npofb20())));
+        }
+        table.append(String.format(Locale.ROOT, "%nThe balancing technique and feature selection each "
+                + "measure picks for each model:%n"));
+        table.append(String.format(Locale.ROOT, VERDICT_FORMAT, "Classifier", "Measure", "Balancing",
+                "FeatureSelection", "Score"));
+        for (ClassifierKind classifier : settings.classifiers()) {
+            for (Measure measure : Measure.values()) {
+                table.append(String.format(Locale.ROOT, VERDICT_FORMAT,
+                        verdict(outcomes, classifier, measure)));
+            }
         }
         log.info(table.toString());
+    }
+
+    /**
+     * @param outcomes   how each model scored under each pairing
+     * @param classifier the model to read the verdict of
+     * @param measure    what the verdict is by
+     * @return the cells of its line of the verdict: the model and the measure, then the balancing
+     * technique and the feature selection it picks and the figure they won with — blank if the model
+     * scored no number under any pairing
+     */
+    private static Object[] verdict(List<EvaluationOutcome> outcomes, ClassifierKind classifier,
+                                    Measure measure) {
+        Optional<EvaluationOutcome> best =
+                BestOutcome.of(outcomes, outcome -> outcome.classifier() == classifier, measure);
+        return new Object[] {
+                classifier.getLabel(),
+                measure.getLabel(),
+                best.map(outcome -> outcome.balancing().getLabel()).orElse(""),
+                best.map(outcome -> outcome.featureSelection().getLabel()).orElse(""),
+                best.map(outcome -> score(measure.of(outcome))).orElse("")
+        };
     }
 
     /**

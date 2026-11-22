@@ -17,7 +17,7 @@ import java.util.StringJoiner;
 
 /**
  * Writes what each model scored, as a comma-separated file holding one row per model, balancing
- * technique, feature selection and phase.
+ * technique and feature selection.
  * <p>
  * A row is flushed as soon as its model is done, for the same reason the dataset's own writer flushes a
  * release as soon as it has been measured: a model already measured is worth keeping when a later one
@@ -41,8 +41,7 @@ public class CsvEvaluationReportWriter implements AutoCloseable {
     private static final int SCALE = 4;
 
     private static final List<String> COLUMNS = List.of("Classifier", "Balancing", "FeatureSelection",
-            "Phase", "Folds",
-            "Accuracy", "Precision", "Recall", "F1", "AUC", "Kappa", "ElapsedSeconds");
+            "Folds", "Accuracy", "Precision", "Recall", "F1", "AUC", "Kappa", "NPofB20", "ElapsedSeconds");
 
     private final Path file;
     private final BufferedWriter writer;
@@ -96,16 +95,14 @@ public class CsvEvaluationReportWriter implements AutoCloseable {
         row.add(escape(outcome.classifier().getLabel()));
         row.add(escape(outcome.balancing().getLabel()));
         row.add(escape(outcome.featureSelection().getLabel()));
-        row.add(escape(outcome.phase().getLabel()));
-        // Blank rather than zero for the inference phase, which cuts no folds: a zero there would read
-        // as a validation over no folds, which is a different thing from not having been one
-        row.add(outcome.folds() > 0 ? String.valueOf(outcome.folds()) : "");
+        row.add(String.valueOf(outcome.folds()));
         row.add(format(outcome.accuracy()));
         row.add(format(outcome.precision()));
         row.add(format(outcome.recall()));
         row.add(format(outcome.fMeasure()));
         row.add(format(outcome.areaUnderRoc()));
         row.add(format(outcome.kappa()));
+        row.add(format(outcome.npofb20()));
         row.add(String.valueOf(outcome.elapsed().toSeconds()));
         try {
             writer.write(row.toString());

@@ -9,7 +9,7 @@ import java.io.Serializable;
 /**
  * Resamples labelled rows so that the buggy class and the not-buggy one are equally represented.
  * <p>
- * What it is handed is the <b>training</b> half of the split, and never the test half. Balancing is a
+ * What it is handed is the <b>training</b> part of a fold, and never the part held out. Balancing is a
  * way of telling a model what to pay attention to, so it belongs where the model is taught; resampling
  * the rows it is finally measured on would instead change the population the figure is an estimate of,
  * and the figure would stop being an estimate of anything the project could be reported on.
@@ -17,7 +17,7 @@ import java.io.Serializable;
  * Two invariants hold of every implementation, and the second follows from the first:
  * <ul>
  * <li>the rows it is given are <b>not</b> written into — what comes back is a set of its own, so a
- * caller can balance one half of a split without the other half changing under it;</li>
+ * caller can balance the training part of a fold without the part held out changing under it;</li>
  * <li>the header of what comes back equals the header of what went in. A model trained on balanced rows
  * is tested on rows nothing has touched, and Weka will only put the two together if they agree on their
  * attributes.</li>

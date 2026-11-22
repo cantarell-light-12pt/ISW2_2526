@@ -3,7 +3,6 @@ package it.uniroma2.dicii.isw2.ml.impl;
 import it.uniroma2.dicii.isw2.ml.model.BalancingKind;
 import it.uniroma2.dicii.isw2.ml.model.ClassifierKind;
 import it.uniroma2.dicii.isw2.ml.model.EvaluationOutcome;
-import it.uniroma2.dicii.isw2.ml.model.EvaluationPhase;
 import it.uniroma2.dicii.isw2.ml.model.FeatureSelectionKind;
 import it.uniroma2.dicii.isw2.ml.model.Measure;
 import org.junit.Test;
@@ -102,11 +101,14 @@ public class BestOutcomeTest {
     @Test
     public void testEveryMeasureReadsTheFigureItIsNamedAfter() {
         EvaluationOutcome outcome = new EvaluationOutcome(ClassifierKind.IBK, BalancingKind.NONE,
-                FeatureSelectionKind.NONE, EvaluationPhase.SELECTION, 0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, Duration.ZERO);
+                FeatureSelectionKind.NONE, 10, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, Duration.ZERO);
         assertEquals(0.1, Measure.ACCURACY.of(outcome), TOLERANCE);
+        assertEquals(0.2, Measure.PRECISION.of(outcome), TOLERANCE);
+        assertEquals(0.3, Measure.RECALL.of(outcome), TOLERANCE);
         assertEquals(0.4, Measure.F1.of(outcome), TOLERANCE);
         assertEquals(0.5, Measure.AUC.of(outcome), TOLERANCE);
         assertEquals(0.6, Measure.KAPPA.of(outcome), TOLERANCE);
+        assertEquals(0.7, Measure.NPOFB20.of(outcome), TOLERANCE);
     }
 
     /**
@@ -121,7 +123,7 @@ public class BestOutcomeTest {
 
     /**
      * @param classifier the model to choose for
-     * @return the outcomes of that model, which is what the balancing study chooses among
+     * @return the outcomes of that model, which is what the verdict of that model chooses among
      */
     private static Predicate<EvaluationOutcome> of(ClassifierKind classifier) {
         return candidate -> candidate.classifier() == classifier;
@@ -134,20 +136,20 @@ public class BestOutcomeTest {
      * @return the outcome, every other figure at a value that would make a different winner of it
      */
     private static EvaluationOutcome outcome(ClassifierKind classifier, BalancingKind balancing, double f1) {
-        return new EvaluationOutcome(classifier, balancing, FeatureSelectionKind.NONE, EvaluationPhase.SELECTION,
-                0, 1 - f1, 1 - f1, 1 - f1, f1, 1 - f1, 1 - f1, Duration.ZERO);
+        return new EvaluationOutcome(classifier, balancing, FeatureSelectionKind.NONE, 10,
+                1 - f1, 1 - f1, 1 - f1, f1, 1 - f1, 1 - f1, 1 - f1, Duration.ZERO);
     }
 
     /**
      * @param balancing        under which technique a forest scored
      * @param featureSelection on which attributes
      * @param f1               the F1 it scored
-     * @return the outcome, measured by validation as the feature selection study measures it
+     * @return the outcome, measured by validation as the workflow measures it
      */
     private static EvaluationOutcome outcome(BalancingKind balancing, FeatureSelectionKind featureSelection,
                                              double f1) {
         return new EvaluationOutcome(ClassifierKind.RANDOM_FOREST, balancing, featureSelection,
-                EvaluationPhase.VALIDATION, 2, 1 - f1, 1 - f1, 1 - f1, f1, 1 - f1, 1 - f1, Duration.ZERO);
+                2, 1 - f1, 1 - f1, 1 - f1, f1, 1 - f1, 1 - f1, 1 - f1, Duration.ZERO);
     }
 
 }

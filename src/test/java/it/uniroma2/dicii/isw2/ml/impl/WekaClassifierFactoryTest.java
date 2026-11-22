@@ -36,8 +36,8 @@ public class WekaClassifierFactoryTest {
     @Before
     public void setUp() {
         factory = new WekaClassifierFactory(new MlSettings(List.of(ClassifierKind.values()),
-                List.of(BalancingKind.NONE), List.of(FeatureSelectionKind.NONE), 0.67, 2, SEED,
-                SyntheticInstances.BUGGY, THREADS, TREES, NEIGHBOURS, 1));
+                List.of(BalancingKind.NONE), List.of(FeatureSelectionKind.NONE), 2, SEED,
+                SyntheticInstances.BUGGY, THREADS, TREES, NEIGHBOURS, 1, SyntheticInstances.SIZE));
     }
 
     @Test

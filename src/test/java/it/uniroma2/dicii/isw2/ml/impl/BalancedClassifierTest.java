@@ -51,8 +51,8 @@ public class BalancedClassifierTest {
     }
 
     /**
-     * The caller trains every model on the same training half, so the one this wrapper was handed has to
-     * come back as it went in — SMOTE adds rows, and adding them to the caller's set would hand the next
+     * The caller trains every model on the same training rows, so the ones this wrapper was handed have to
+     * come back as they went in — SMOTE adds rows, and adding them to the caller's set would hand the next
      * model a dataset nobody configured.
      */
     @Test

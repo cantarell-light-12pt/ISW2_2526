@@ -39,7 +39,7 @@ public class ReleaseDatasetTrimmerTest {
 
     /**
      * What is kept is still the dataset it came from: the label the nominal class it was read as, and
-     * the columns naming each row still on, since the split reads the release off them.
+     * the columns naming each row still on, so that the trimmed file names every row as the whole does.
      */
     @Test
     public void testTheHeaderOfTheWholeDatasetIsKept() throws MlException {
