@@ -153,9 +153,9 @@ public class JGitHistoryExtractor implements MetricsExtractor {
             classHistory = ClassHistory.UNTOUCHED;
         }
         ClassMetrics metrics = report.forClass(path, ClassNameResolver.qualifiedName("", path));
-        metrics.set(Metric.CH, classHistory.churn());
-        metrics.set(Metric.MCH, classHistory.maxChurn());
-        metrics.set(Metric.CIS, classHistory.sizeChange());
+        metrics.set(Metric.CH, (double) classHistory.churn());
+        metrics.set(Metric.MCH, (double) classHistory.maxChurn());
+        metrics.set(Metric.CIS, (double) classHistory.sizeChange());
         metrics.set(Metric.NR, classHistory.revisions());
         metrics.set(Metric.NDA, classHistory.authors());
         metrics.set(Metric.AGE, classHistory.age());

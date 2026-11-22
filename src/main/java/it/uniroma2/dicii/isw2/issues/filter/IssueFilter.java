@@ -19,8 +19,8 @@ public class IssueFilter {
     private List<IssueType> types;
     private List<ResolutionType> resolutions;
     private List<String> fields;
-    private Long maxResults;
-    private Long startAt;
+    private final Long maxResults;
+    private final Long startAt;
 
     public IssueFilter() {
         this.maxResults = DEFAULT_MAX_RESULTS;
