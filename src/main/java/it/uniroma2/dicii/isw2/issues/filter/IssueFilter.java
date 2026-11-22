@@ -19,7 +19,7 @@ public class IssueFilter {
     private List<IssueType> types;
     private List<ResolutionType> resolutions;
     private List<String> fields;
-    private Long maxResults;
+    private final Long maxResults;
     private Long startAt;
 
     public IssueFilter() {
