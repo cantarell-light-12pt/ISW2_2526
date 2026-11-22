@@ -51,7 +51,7 @@ public class WekaFeatureSelectorTest {
         data = SyntheticInstances.separable(ROWS);
         MlSettings settings = new MlSettings(List.of(ClassifierKind.NAIVE_BAYES), List.of(BalancingKind.NONE),
                 List.of(FeatureSelectionKind.values()), 2, 1, SyntheticInstances.BUGGY, 1, 10, 1,
-                KEPT_BY_GAIN);
+                KEPT_BY_GAIN, SyntheticInstances.SIZE);
         selector = new WekaFeatureSelector(settings);
     }
 

@@ -34,12 +34,14 @@ import java.util.List;
  * @param randomForestIterations     how many trees a forest is grown with
  * @param ibkNeighbours              how many neighbours a nearest-neighbour classifier votes among
  * @param infoGainAttributes         how many attributes a selection by information gain keeps
+ * @param sizeAttribute              the attribute the size of a class is read off, which is what NPofB20
+ *                                   measures the effort of inspecting it by
  */
 @Slf4j
 public record MlSettings(List<ClassifierKind> classifiers, List<BalancingKind> balancingTechniques,
                          List<FeatureSelectionKind> featureSelectionTechniques, int folds, int seed,
                          String positiveClass, int threads, int randomForestIterations, int ibkNeighbours,
-                         int infoGainAttributes) {
+                         int infoGainAttributes, String sizeAttribute) {
 
     private static final String PREFIX = "project.ml.";
 
@@ -83,6 +85,10 @@ public record MlSettings(List<ClassifierKind> classifiers, List<BalancingKind> b
         if (infoGainAttributes < 1) {
             throw new IllegalArgumentException("A selection by information gain keeps at least one "
                     + "attribute, not " + infoGainAttributes);
+        }
+        if (sizeAttribute == null || sizeAttribute.isBlank()) {
+            throw new IllegalArgumentException("The attribute the size of a class is read off has to be "
+                    + "named, since NPofB20 measures the effort of an inspection by it");
         }
     }
 
@@ -131,7 +137,8 @@ public record MlSettings(List<ClassifierKind> classifiers, List<BalancingKind> b
                 configuredThreads(),
                 integer("randomForest.iterations", 100),
                 integer("ibk.neighbours", 3),
-                integer("featureSelection.infoGainAttributes", 10));
+                integer("featureSelection.infoGainAttributes", 10),
+                stringify("npofb.sizeAttribute", "LOC"));
     }
 
     /**

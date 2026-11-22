@@ -36,6 +36,12 @@ final class SyntheticInstances {
     static final List<String> NOISE = List.of("noise1", "noise2");
 
     /**
+     * The attribute NPofB20 charges an inspection by. One of the noise columns, which are positive and
+     * say nothing of the label, so that the size of a row neither helps nor hinders a ranking.
+     */
+    static final String SIZE = NOISE.getFirst();
+
+    /**
      * How the label reads, as the dataset writes it. The not-buggy rows come first, so that the buggy
      * class is the <i>second</i> value of the attribute — which is what these tests want, since code
      * that assumes it is the first is exactly the mistake worth catching.
@@ -230,7 +236,7 @@ final class SyntheticInstances {
      */
     static MlSettings settings(ClassifierKind classifier, String positiveClass, BalancingKind balancing) {
         return new MlSettings(List.of(classifier), List.of(balancing), List.of(FeatureSelectionKind.NONE),
-                2, 1, positiveClass, 1, 10, 1, 1);
+                2, 1, positiveClass, 1, 10, 1, 1, SIZE);
     }
 
     /**

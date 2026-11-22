@@ -40,8 +40,8 @@ public class CsvEvaluationReportWriter implements AutoCloseable {
      */
     private static final int SCALE = 4;
 
-    private static final List<String> COLUMNS = List.of("Classifier", "Balancing", "FeatureSelection", "Folds",
-            "Accuracy", "Precision", "Recall", "F1", "AUC", "Kappa", "ElapsedSeconds");
+    private static final List<String> COLUMNS = List.of("Classifier", "Balancing", "FeatureSelection",
+            "Folds", "Accuracy", "Precision", "Recall", "F1", "AUC", "Kappa", "NPofB20", "ElapsedSeconds");
 
     private final Path file;
     private final BufferedWriter writer;
@@ -102,6 +102,7 @@ public class CsvEvaluationReportWriter implements AutoCloseable {
         row.add(format(outcome.fMeasure()));
         row.add(format(outcome.areaUnderRoc()));
         row.add(format(outcome.kappa()));
+        row.add(format(outcome.npofb20()));
         row.add(String.valueOf(outcome.elapsed().toSeconds()));
         try {
             writer.write(row.toString());

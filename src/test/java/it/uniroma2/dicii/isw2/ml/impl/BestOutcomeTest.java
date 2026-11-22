@@ -101,13 +101,14 @@ public class BestOutcomeTest {
     @Test
     public void testEveryMeasureReadsTheFigureItIsNamedAfter() {
         EvaluationOutcome outcome = new EvaluationOutcome(ClassifierKind.IBK, BalancingKind.NONE,
-                FeatureSelectionKind.NONE, 10, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, Duration.ZERO);
+                FeatureSelectionKind.NONE, 10, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, Duration.ZERO);
         assertEquals(0.1, Measure.ACCURACY.of(outcome), TOLERANCE);
         assertEquals(0.2, Measure.PRECISION.of(outcome), TOLERANCE);
         assertEquals(0.3, Measure.RECALL.of(outcome), TOLERANCE);
         assertEquals(0.4, Measure.F1.of(outcome), TOLERANCE);
         assertEquals(0.5, Measure.AUC.of(outcome), TOLERANCE);
         assertEquals(0.6, Measure.KAPPA.of(outcome), TOLERANCE);
+        assertEquals(0.7, Measure.NPOFB20.of(outcome), TOLERANCE);
     }
 
     /**
@@ -136,7 +137,7 @@ public class BestOutcomeTest {
      */
     private static EvaluationOutcome outcome(ClassifierKind classifier, BalancingKind balancing, double f1) {
         return new EvaluationOutcome(classifier, balancing, FeatureSelectionKind.NONE, 10,
-                1 - f1, 1 - f1, 1 - f1, f1, 1 - f1, 1 - f1, Duration.ZERO);
+                1 - f1, 1 - f1, 1 - f1, f1, 1 - f1, 1 - f1, 1 - f1, Duration.ZERO);
     }
 
     /**
@@ -148,7 +149,7 @@ public class BestOutcomeTest {
     private static EvaluationOutcome outcome(BalancingKind balancing, FeatureSelectionKind featureSelection,
                                              double f1) {
         return new EvaluationOutcome(ClassifierKind.RANDOM_FOREST, balancing, featureSelection,
-                2, 1 - f1, 1 - f1, 1 - f1, f1, 1 - f1, 1 - f1, Duration.ZERO);
+                2, 1 - f1, 1 - f1, 1 - f1, f1, 1 - f1, 1 - f1, 1 - f1, Duration.ZERO);
     }
 
 }

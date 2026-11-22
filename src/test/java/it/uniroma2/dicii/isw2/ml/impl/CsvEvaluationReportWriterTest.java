@@ -27,8 +27,8 @@ import static org.junit.Assert.assertTrue;
  */
 public class CsvEvaluationReportWriterTest {
 
-    private static final List<String> COLUMNS = List.of("Classifier", "Balancing", "FeatureSelection", "Folds",
-            "Accuracy", "Precision", "Recall", "F1", "AUC", "Kappa", "ElapsedSeconds");
+    private static final List<String> COLUMNS = List.of("Classifier", "Balancing", "FeatureSelection",
+            "Folds", "Accuracy", "Precision", "Recall", "F1", "AUC", "Kappa", "NPofB20", "ElapsedSeconds");
 
     @Rule
     public TemporaryFolder output = new TemporaryFolder();
@@ -61,11 +61,11 @@ public class CsvEvaluationReportWriterTest {
     @Test
     public void testAModelIsWrittenAsOneRowOfItsScores() throws MlException, IOException {
         try (CsvEvaluationReportWriter report = CsvEvaluationReportWriter.open(file)) {
-            report.write(outcome(0.8532, 0.4211, 0.3125, 0.3587, 0.7419, 0.2604));
+            report.write(outcome(0.8532, 0.4211, 0.3125, 0.3587, 0.7419, 0.2604, 0.4167));
         }
         List<String> lines = lines();
         assertEquals(2, lines.size());
-        assertEquals("RandomForest,None,None,10,0.8532,0.4211,0.3125,0.3587,0.7419,0.2604,12",
+        assertEquals("RandomForest,None,None,10,0.8532,0.4211,0.3125,0.3587,0.7419,0.2604,0.4167,12",
                 lines.get(1));
     }
 
@@ -76,7 +76,7 @@ public class CsvEvaluationReportWriterTest {
     @Test
     public void testARowIsDurableBeforeTheReportIsClosed() throws MlException, IOException {
         try (CsvEvaluationReportWriter report = CsvEvaluationReportWriter.open(file)) {
-            report.write(outcome(0.8532, 0.4211, 0.3125, 0.3587, 0.7419, 0.2604));
+            report.write(outcome(0.8532, 0.4211, 0.3125, 0.3587, 0.7419, 0.2604, 0.4167));
             assertEquals(2, lines().size());
         }
     }
@@ -88,7 +88,7 @@ public class CsvEvaluationReportWriterTest {
     @Test
     public void testAMeasureThatIsNoNumberIsLeftBlank() throws MlException, IOException {
         try (CsvEvaluationReportWriter report = CsvEvaluationReportWriter.open(file)) {
-            report.write(outcome(0.8532, Double.NaN, 0.0, Double.NaN, Double.NaN, 0.0));
+            report.write(outcome(0.8532, Double.NaN, 0.0, Double.NaN, Double.NaN, 0.0, Double.NaN));
         }
         String[] fields = lines().get(1).split(",", -1);
         assertEquals(COLUMNS.size(), fields.length);
@@ -96,6 +96,7 @@ public class CsvEvaluationReportWriterTest {
         assertEquals("", fields[COLUMNS.indexOf("F1")]);
         assertEquals("", fields[COLUMNS.indexOf("AUC")]);
         assertEquals("0", fields[COLUMNS.indexOf("Recall")]);
+        assertEquals("", fields[COLUMNS.indexOf("NPofB20")]);
     }
 
     /**
@@ -106,7 +107,7 @@ public class CsvEvaluationReportWriterTest {
     public void testTheScoresDoNotDependOnTheDefaultLocale() throws MlException, IOException {
         Locale.setDefault(Locale.ITALY);
         try (CsvEvaluationReportWriter report = CsvEvaluationReportWriter.open(file)) {
-            report.write(outcome(0.8532, 0.4211, 0.3125, 0.3587, 0.7419, 0.2604));
+            report.write(outcome(0.8532, 0.4211, 0.3125, 0.3587, 0.7419, 0.2604, 0.4167));
         }
         String[] fields = lines().get(1).split(",", -1);
         assertEquals(COLUMNS.size(), fields.length);
@@ -119,10 +120,10 @@ public class CsvEvaluationReportWriterTest {
     @Test
     public void testASecondRunReplacesTheReportOfTheFirst() throws MlException, IOException {
         try (CsvEvaluationReportWriter report = CsvEvaluationReportWriter.open(file)) {
-            report.write(outcome(0.8532, 0.4211, 0.3125, 0.3587, 0.7419, 0.2604));
+            report.write(outcome(0.8532, 0.4211, 0.3125, 0.3587, 0.7419, 0.2604, 0.4167));
         }
         try (CsvEvaluationReportWriter report = CsvEvaluationReportWriter.open(file)) {
-            report.write(outcome(0.9, 0.5, 0.4, 0.44, 0.8, 0.3));
+            report.write(outcome(0.9, 0.5, 0.4, 0.44, 0.8, 0.3, 0.5));
         }
         List<String> lines = lines();
         assertEquals(2, lines.size());
@@ -133,9 +134,10 @@ public class CsvEvaluationReportWriterTest {
      * @return how one model scored, with the figures the caller wants to read back
      */
     private static EvaluationOutcome outcome(double accuracy, double precision, double recall,
-                                             double fMeasure, double areaUnderRoc, double kappa) {
+                                             double fMeasure, double areaUnderRoc, double kappa,
+                                             double npofb20) {
         return new EvaluationOutcome(ClassifierKind.RANDOM_FOREST, BalancingKind.NONE, FeatureSelectionKind.NONE,
-                10, accuracy, precision, recall, fMeasure, areaUnderRoc, kappa,
+                10, accuracy, precision, recall, fMeasure, areaUnderRoc, kappa, npofb20,
                 Duration.ofSeconds(12));
     }
 

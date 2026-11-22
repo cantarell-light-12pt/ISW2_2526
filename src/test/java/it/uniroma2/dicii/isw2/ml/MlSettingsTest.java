@@ -24,6 +24,11 @@ public class MlSettingsTest {
     private static final String BUGGY = "1";
 
     /**
+     * The attribute NPofB20 measures the effort of an inspection by, as the dataset names it.
+     */
+    private static final String SIZE = "LOC";
+
+    /**
      * One model, since what is under test here is the settings and not the comparison.
      */
     private static final List<ClassifierKind> MODELS = List.of(ClassifierKind.IBK);
@@ -82,7 +87,7 @@ public class MlSettingsTest {
     @Test
     public void testAValidationOfFewerThanTwoFoldsIsRefused() {
         assertThrows(IllegalArgumentException.class,
-                () -> new MlSettings(MODELS, BALANCING, SELECTION, 1, 1, BUGGY, 1, 100, 3, 10));
+                () -> new MlSettings(MODELS, BALANCING, SELECTION, 1, 1, BUGGY, 1, 100, 3, 10, SIZE));
     }
 
     /**
@@ -93,14 +98,14 @@ public class MlSettingsTest {
     @Test
     public void testAnUnnamedBalancingTechniqueIsRefused() {
         assertThrows(IllegalArgumentException.class,
-                () -> new MlSettings(MODELS, null, SELECTION, 10, 1, BUGGY, 1, 100, 3, 10));
+                () -> new MlSettings(MODELS, null, SELECTION, 10, 1, BUGGY, 1, 100, 3, 10, SIZE));
     }
 
     @Test
     public void testAnEmptyListOfBalancingTechniquesIsRefused() {
         List<BalancingKind> none = List.of();
         assertThrows(IllegalArgumentException.class,
-                () -> new MlSettings(MODELS, none, SELECTION, 10, 1, BUGGY, 1, 100, 3, 10));
+                () -> new MlSettings(MODELS, none, SELECTION, 10, 1, BUGGY, 1, 100, 3, 10, SIZE));
     }
 
     /**
@@ -120,7 +125,7 @@ public class MlSettingsTest {
     @Test
     public void testTheBalancingTechniquesCannotBeWrittenIntoBehindTheSettings() {
         List<BalancingKind> techniques = new ArrayList<>(List.of(BalancingKind.NONE));
-        MlSettings settings = new MlSettings(MODELS, techniques, SELECTION, 10, 1, BUGGY, 1, 100, 3, 10);
+        MlSettings settings = new MlSettings(MODELS, techniques, SELECTION, 10, 1, BUGGY, 1, 100, 3, 10, SIZE);
         techniques.add(BalancingKind.SMOTE);
         assertEquals(List.of(BalancingKind.NONE), settings.balancingTechniques());
     }
@@ -132,10 +137,10 @@ public class MlSettingsTest {
     @Test
     public void testAnUnnamedFeatureSelectionIsRefused() {
         assertThrows(IllegalArgumentException.class,
-                () -> new MlSettings(MODELS, BALANCING, null, 10, 1, BUGGY, 1, 100, 3, 10));
+                () -> new MlSettings(MODELS, BALANCING, null, 10, 1, BUGGY, 1, 100, 3, 10, SIZE));
         List<FeatureSelectionKind> none = List.of();
         assertThrows(IllegalArgumentException.class,
-                () -> new MlSettings(MODELS, BALANCING, none, 10, 1, BUGGY, 1, 100, 3, 10));
+                () -> new MlSettings(MODELS, BALANCING, none, 10, 1, BUGGY, 1, 100, 3, 10, SIZE));
     }
 
     /**
@@ -153,7 +158,7 @@ public class MlSettingsTest {
     public void testTheFeatureSelectionsCannotBeWrittenIntoBehindTheSettings() {
         List<FeatureSelectionKind> techniques = new ArrayList<>(SELECTION);
         MlSettings settings = new MlSettings(MODELS, BALANCING, techniques, 10, 1, BUGGY, 1, 100, 3,
-                10);
+                10, SIZE);
         techniques.add(FeatureSelectionKind.INFO_GAIN);
         assertEquals(SELECTION, settings.featureSelectionTechniques());
     }
@@ -161,7 +166,7 @@ public class MlSettingsTest {
     @Test
     public void testASelectionByInformationGainKeepingNothingIsRefused() {
         assertThrows(IllegalArgumentException.class,
-                () -> new MlSettings(MODELS, BALANCING, SELECTION, 10, 1, BUGGY, 1, 100, 3, 0));
+                () -> new MlSettings(MODELS, BALANCING, SELECTION, 10, 1, BUGGY, 1, 100, 3, 0, SIZE));
     }
 
     @Test
@@ -179,7 +184,7 @@ public class MlSettingsTest {
         MlSettings settings = new MlSettings(List.of(ClassifierKind.IBK, ClassifierKind.NAIVE_BAYES),
                 List.of(BalancingKind.NONE, BalancingKind.SMOTE),
                 List.of(FeatureSelectionKind.NONE, FeatureSelectionKind.INFO_GAIN), 10, 1, BUGGY, 1,
-                100, 3, 10);
+                100, 3, 10, SIZE);
         List<ModelConfiguration> configurations = settings.configurations();
         assertEquals(8, configurations.size());
         assertEquals(new ModelConfiguration(ClassifierKind.IBK, BalancingKind.NONE, FeatureSelectionKind.NONE),
@@ -190,6 +195,23 @@ public class MlSettingsTest {
                 configurations.get(2));
         assertEquals(new ModelConfiguration(ClassifierKind.NAIVE_BAYES, BalancingKind.SMOTE,
                 FeatureSelectionKind.INFO_GAIN), configurations.getLast());
+    }
+
+    /**
+     * NPofB20 charges an inspection by the size of the class inspected, so which attribute that is has
+     * to be named, and the dataset names it LOC.
+     */
+    @Test
+    public void testAnUnnamedSizeAttributeIsRefused() {
+        for (String size : new String[] {null, "", " "}) {
+            assertThrows(IllegalArgumentException.class,
+                    () -> new MlSettings(MODELS, BALANCING, SELECTION, 10, 1, BUGGY, 1, 100, 3, 10, size));
+        }
+    }
+
+    @Test
+    public void testTheSizeOfAClassIsReadOffItsLinesOfCode() throws MlException {
+        assertEquals(SIZE, MlSettings.load().sizeAttribute());
     }
 
     @Test
@@ -205,17 +227,17 @@ public class MlSettingsTest {
     @Test
     public void testAnUnnamedBuggyClassIsRefused() {
         assertThrows(IllegalArgumentException.class,
-                () -> new MlSettings(MODELS, BALANCING, SELECTION, 10, 1, " ", 1, 100, 3, 10));
+                () -> new MlSettings(MODELS, BALANCING, SELECTION, 10, 1, " ", 1, 100, 3, 10, SIZE));
     }
 
     @Test
     public void testAModelBuiltOutOfNothingIsRefused() {
         assertThrows(IllegalArgumentException.class,
-                () -> new MlSettings(MODELS, BALANCING, SELECTION, 10, 1, BUGGY, 1, 0, 3, 10));
+                () -> new MlSettings(MODELS, BALANCING, SELECTION, 10, 1, BUGGY, 1, 0, 3, 10, SIZE));
         assertThrows(IllegalArgumentException.class,
-                () -> new MlSettings(MODELS, BALANCING, SELECTION, 10, 1, BUGGY, 1, 100, 0, 10));
+                () -> new MlSettings(MODELS, BALANCING, SELECTION, 10, 1, BUGGY, 1, 100, 0, 10, SIZE));
         assertThrows(IllegalArgumentException.class,
-                () -> new MlSettings(MODELS, BALANCING, SELECTION, 10, 1, BUGGY, 0, 100, 3, 10));
+                () -> new MlSettings(MODELS, BALANCING, SELECTION, 10, 1, BUGGY, 0, 100, 3, 10, SIZE));
     }
 
     /**
@@ -241,7 +263,7 @@ public class MlSettingsTest {
      * @return settings holding them, everything else left at something workable
      */
     private static MlSettings settings(List<ClassifierKind> classifiers) {
-        return new MlSettings(classifiers, BALANCING, SELECTION, 10, 1, BUGGY, 1, 100, 3, 10);
+        return new MlSettings(classifiers, BALANCING, SELECTION, 10, 1, BUGGY, 1, 100, 3, 10, SIZE);
     }
 
 }

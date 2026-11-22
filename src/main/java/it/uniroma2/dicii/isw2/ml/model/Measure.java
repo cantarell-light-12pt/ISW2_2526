@@ -16,7 +16,9 @@ import java.util.function.ToDoubleFunction;
  * flags; F1 weighs the two at the threshold the model actually answers with, so it moves with the trade
  * between them a technique buys; AUC is of the buggy class across every threshold, so it says whether
  * the model ranks the faulty classes higher, whatever it answers; kappa is what is left of the accuracy
- * once what guessing at the observed rates would reach is taken out. A configuration that wins on all of
+ * once what guessing at the observed rates would reach is taken out; NPofB20 is the share of the buggy
+ * classes a reviewer reading a fifth of the code, in the order the model ranks it, would have found,
+ * which is what a model is finally used for. A configuration that wins on all of
  * them is the answer; one that wins on some is a choice the reader has to make, and the report says
  * which.
  */
@@ -28,7 +30,8 @@ public enum Measure {
     RECALL("Recall", EvaluationOutcome::recall),
     F1("F1", EvaluationOutcome::fMeasure),
     AUC("AUC", EvaluationOutcome::areaUnderRoc),
-    KAPPA("Kappa", EvaluationOutcome::kappa);
+    KAPPA("Kappa", EvaluationOutcome::kappa),
+    NPOFB20("NPofB20", EvaluationOutcome::npofb20);
 
     /**
      * How the measure reads in the reports.

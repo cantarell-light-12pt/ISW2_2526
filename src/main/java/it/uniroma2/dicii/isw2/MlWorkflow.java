@@ -75,7 +75,7 @@ public class MlWorkflow {
      * than as the number it is, so that a cell no model could fill can be left blank instead of reading
      * {@code NaN}.
      */
-    private static final String ROW_FORMAT = "%-14s %-14s %-16s %9s %9s %9s %9s %9s %9s%n";
+    private static final String ROW_FORMAT = "%-14s %-14s %-16s %9s %9s %9s %9s %9s %9s %9s%n";
 
     /**
      * How one line of the logged verdict is laid out: a model and a measure, then the pairing of
@@ -163,7 +163,8 @@ public class MlWorkflow {
      */
     private static List<EvaluationOutcome> measure(Instances data, MlSettings settings,
                                                    CsvEvaluationReportWriter report) throws MlException {
-        ModelEvaluator evaluator = new CrossValidatingEvaluator(new WekaClassifierFactory(settings), settings);
+        ModelEvaluator evaluator =
+                new CrossValidatingEvaluator(new WekaClassifierFactory(settings), settings);
         List<ModelConfiguration> configurations = settings.configurations();
         log.info("Validating {} models under {} balancing techniques and {} feature selections over {} "
                         + "folds", settings.classifiers().size(), settings.balancingTechniques().size(),
@@ -186,7 +187,7 @@ public class MlWorkflow {
      * Logs the comparison as a table, one row per model and pairing of techniques, and then the verdict:
      * for each model and measure, the pairing that measure picks, with the figure that made it win.
      * <p>
-     * The four figures beside accuracy and kappa are of the buggy class alone, and are worth a glance
+     * The four figures beside accuracy, kappa and NPofB20 are of the buggy class alone, and are worth a glance
      * before accuracy is believed: some 23% of the rows are buggy, so a model finding none of them still
      * scores .77, and two models can differ by nothing in accuracy while differing entirely in whether
      * they found anything. Kappa is what says the same thing of the whole matrix — it is what is left of
@@ -201,12 +202,13 @@ public class MlWorkflow {
                 "How each model predicts the buggy classes, validated over %d folds of the trimmed "
                         + "dataset:%n", settings.folds()));
         table.append(String.format(Locale.ROOT, ROW_FORMAT, "Classifier", "Balancing", "FeatureSelection",
-                "Accuracy", "Precision", "Recall", "F1", "AUC", "Kappa"));
+                "Accuracy", "Precision", "Recall", "F1", "AUC", "Kappa", "NPofB20"));
         for (EvaluationOutcome outcome : outcomes) {
             table.append(String.format(Locale.ROOT, ROW_FORMAT, outcome.classifier().getLabel(),
                     outcome.balancing().getLabel(), outcome.featureSelection().getLabel(),
                     score(outcome.accuracy()), score(outcome.precision()), score(outcome.recall()),
-                    score(outcome.fMeasure()), score(outcome.areaUnderRoc()), score(outcome.kappa())));
+                    score(outcome.fMeasure()), score(outcome.areaUnderRoc()), score(outcome.kappa()),
+                    score(outcome.npofb20())));
         }
         table.append(String.format(Locale.ROOT, "%nThe balancing technique and feature selection each "
                 + "measure picks for each model:%n"));
@@ -214,7 +216,8 @@ public class MlWorkflow {
                 "FeatureSelection", "Score"));
         for (ClassifierKind classifier : settings.classifiers()) {
             for (Measure measure : Measure.values()) {
-                table.append(String.format(Locale.ROOT, VERDICT_FORMAT, verdict(outcomes, classifier, measure)));
+                table.append(String.format(Locale.ROOT, VERDICT_FORMAT,
+                        verdict(outcomes, classifier, measure)));
             }
         }
         log.info(table.toString());

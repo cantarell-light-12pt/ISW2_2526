@@ -23,10 +23,12 @@ import java.time.Duration;
  * @param areaUnderRoc     of the buggy class
  * @param kappa            agreement with the truth over and above what guessing at the observed rates
  *                         would reach
+ * @param npofb20          the share of the buggy classes found by inspecting the classes in order of
+ *                         bug density until a fifth of the size of them all has been read
  * @param elapsed          how long the validation took
  */
 public record EvaluationOutcome(ClassifierKind classifier, BalancingKind balancing,
                                 FeatureSelectionKind featureSelection, int folds,
                                 double accuracy, double precision, double recall, double fMeasure,
-                                double areaUnderRoc, double kappa, Duration elapsed) {
+                                double areaUnderRoc, double kappa, double npofb20, Duration elapsed) {
 }

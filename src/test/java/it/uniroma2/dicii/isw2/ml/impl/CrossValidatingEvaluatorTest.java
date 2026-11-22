@@ -11,8 +11,12 @@ import it.uniroma2.dicii.isw2.ml.model.FeatureSelectionKind;
 import it.uniroma2.dicii.isw2.ml.model.ModelConfiguration;
 import org.junit.Before;
 import org.junit.Test;
+import weka.classifiers.Evaluation;
 import weka.classifiers.rules.ZeroR;
 import weka.core.Instances;
+
+import java.util.List;
+import java.util.Random;
 
 import static it.uniroma2.dicii.isw2.ml.impl.SyntheticInstances.configuration;
 import static org.junit.Assert.assertEquals;
@@ -196,6 +200,86 @@ public class CrossValidatingEvaluatorTest {
         assertEquals(first.fMeasure(), second.fMeasure(), TOLERANCE);
         assertEquals(first.areaUnderRoc(), second.areaUnderRoc(), TOLERANCE);
         assertEquals(first.kappa(), second.kappa(), TOLERANCE);
+        assertEquals(first.npofb20(), second.npofb20(), TOLERANCE);
+    }
+
+    /**
+     * The folds are cut here rather than by Weka, so that every prediction can be paired with the row it
+     * was of — and cut exactly as Weka cuts them, which is what this holds the evaluator to: every
+     * figure Weka computes has to come out as {@code crossValidateModel} would have it, to the last
+     * digit, for every model and under the techniques that draw random numbers of their own. The rows
+     * are noise, so that a figure is no round number a mistake could land on by chance.
+     */
+    @Test
+    public void testTheFiguresAreThoseOfWekasOwnCrossValidation() throws Exception {
+        Instances noise = SyntheticInstances.imbalanced(IMBALANCED_ROWS, IMBALANCED_BUGGY_ROWS);
+        WekaClassifierFactory factory = new WekaClassifierFactory(settings);
+        int buggy = noise.classAttribute().indexOfValue(SyntheticInstances.BUGGY);
+        for (ModelConfiguration configuration : List.of(IBK, NAIVE_BAYES, RANDOM_FOREST,
+                new ModelConfiguration(ClassifierKind.RANDOM_FOREST, BalancingKind.SMOTE,
+                        FeatureSelectionKind.BACKWARD_SEARCH))) {
+            Evaluation weka = new Evaluation(noise);
+            weka.crossValidateModel(factory.build(configuration), noise, settings.folds(),
+                    new Random(settings.seed()));
+            EvaluationOutcome outcome = evaluator.evaluate(noise, configuration);
+            String model = configuration.describe();
+            assertEquals(model, weka.pctCorrect() / 100, outcome.accuracy(), TOLERANCE);
+            assertEquals(model, weka.precision(buggy), outcome.precision(), TOLERANCE);
+            assertEquals(model, weka.recall(buggy), outcome.recall(), TOLERANCE);
+            assertEquals(model, weka.fMeasure(buggy), outcome.fMeasure(), TOLERANCE);
+            assertEquals(model, weka.areaUnderROC(buggy), outcome.areaUnderRoc(), TOLERANCE);
+            assertEquals(model, weka.kappa(), outcome.kappa(), TOLERANCE);
+        }
+    }
+
+    /**
+     * The buggy rows give themselves away, so a model ranking the classes by how likely it finds them
+     * buggy puts them first, and a reviewer reading a fifth of the code in that order finds them all:
+     * they are a tenth of the rows, and of about a tenth of the size.
+     */
+    @Test
+    public void testNPofB20FindsTheBuggyRowsAModelRanksFirst() throws MlException {
+        Instances separable = SyntheticInstances.separable(IMBALANCED_ROWS, IMBALANCED_BUGGY_ROWS / 2);
+        EvaluationOutcome outcome = evaluator.evaluate(separable, NAIVE_BAYES);
+        assertTrue("The buggy rows were not ranked first: " + outcome.npofb20(), outcome.npofb20() > 0.9);
+    }
+
+    /**
+     * A model answering the same for every row ranks the classes by their size alone, which tells
+     * nothing of the label: the share it finds is whatever the smallest fifth of the code happens to
+     * hold, and is still a share.
+     */
+    @Test
+    public void testNPofB20OfAModelThatRanksNothingIsStillAShare() throws MlException {
+        Instances imbalanced = SyntheticInstances.imbalanced(IMBALANCED_ROWS, IMBALANCED_BUGGY_ROWS);
+        ModelFactory alwaysNotBuggy = configuration -> new ZeroR();
+        EvaluationOutcome outcome = new CrossValidatingEvaluator(alwaysNotBuggy, settings)
+                .evaluate(imbalanced, NAIVE_BAYES);
+        assertTrue(outcome.npofb20() >= 0 && outcome.npofb20() <= 1);
+    }
+
+    /**
+     * NPofB20 charges an inspection by the size of the class, so a dataset without the configured size
+     * attribute has to fail rather than rank by something else.
+     */
+    @Test
+    public void testADatasetWithoutTheSizeAttributeCannotBeMeasured() {
+        MlSettings unsized = new MlSettings(settings.classifiers(), settings.balancingTechniques(),
+                settings.featureSelectionTechniques(), settings.folds(), settings.seed(),
+                settings.positiveClass(), settings.threads(), settings.randomForestIterations(),
+                settings.ibkNeighbours(), settings.infoGainAttributes(), "LOC");
+        ModelEvaluator misreading = new CrossValidatingEvaluator(new WekaClassifierFactory(unsized), unsized);
+        MlException thrown = assertThrows(MlException.class, () -> misreading.evaluate(data, NAIVE_BAYES));
+        assertTrue(thrown.getMessage().contains("LOC"));
+    }
+
+    /**
+     * A class of unknown size can be neither placed in a ranking by density nor charged to the budget.
+     */
+    @Test
+    public void testARowOfUnknownSizeCannotBeMeasured() {
+        data.instance(0).setMissing(data.attribute(SyntheticInstances.SIZE));
+        assertThrows(MlException.class, () -> evaluator.evaluate(data, NAIVE_BAYES));
     }
 
     /**
